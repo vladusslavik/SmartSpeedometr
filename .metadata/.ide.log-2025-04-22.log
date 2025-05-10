@@ -1,0 +1,33 @@
+2025-04-22 14:37:49,925 [INFO] WebApp:191 - Connection restablished
+2025-04-22 14:40:02,638 [INFO] UtilMem:75 - End SaveConfig() Used Memory: 992797040 Bytes (1073741824)
+2025-04-22 14:40:04,275 [INFO] UtilMem:75 - End SaveConfig() Used Memory: 670901880 Bytes (1073741824)
+2025-04-22 14:40:04,620 [INFO] UtilMem:75 - End SaveConfig() Used Memory: 688188808 Bytes (1073741824)
+2025-04-22 14:40:04,956 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: NVIC
+2025-04-22 14:40:04,957 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: SYS
+2025-04-22 14:40:04,958 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: GPIO
+2025-04-22 14:40:04,958 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: RCC
+2025-04-22 14:40:04,959 [INFO] CodeGenerator:882 - code generatio: config db path: /Applications/STM32CubeIDE.app/Contents/Eclipse/plugins/com.st.stm32cube.common.mx_6.14.0.202502271554//db/
+2025-04-22 14:40:05,087 [INFO] CodeEngine:263 - oldGeneratedFile, /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/MXTmpFiles/license.tmp_save
+2025-04-22 14:40:05,176 [INFO] CodeEngine:287 - Generated code: /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/MXTmpFiles/license.tmp
+2025-04-22 14:40:05,208 [INFO] CodeEngine:263 - oldGeneratedFile, /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/MXTmpFiles/gpio.tmp_save
+2025-04-22 14:40:05,311 [INFO] CodeEngine:287 - Generated code: /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/MXTmpFiles/gpio.tmp
+2025-04-22 14:40:05,350 [INFO] CodeEngine:263 - oldGeneratedFile, /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Src/stm32g0xx_it.c_save
+2025-04-22 14:40:05,444 [INFO] CodeEngine:287 - Generated code: /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Src/stm32g0xx_it.c
+2025-04-22 14:40:05,448 [INFO] CodeEngine:263 - oldGeneratedFile, /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Inc/stm32g0xx_it.h_save
+2025-04-22 14:40:05,531 [INFO] CodeEngine:287 - Generated code: /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Inc/stm32g0xx_it.h
+2025-04-22 14:40:05,539 [INFO] CodeEngine:263 - oldGeneratedFile, /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Src/stm32g0xx_hal_msp.c_save
+2025-04-22 14:40:05,663 [INFO] CodeEngine:287 - Generated code: /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Src/stm32g0xx_hal_msp.c
+2025-04-22 14:40:05,666 [INFO] CodeEngine:263 - oldGeneratedFile, /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/MXTmpFiles/system.tmp_save
+2025-04-22 14:40:05,758 [INFO] CodeEngine:287 - Generated code: /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/MXTmpFiles/system.tmp
+2025-04-22 14:40:05,764 [INFO] CodeEngine:319 - oldGeneratedFile, /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Inc/stm32g0xx_hal_conf.h_save
+2025-04-22 14:40:05,878 [INFO] CodeEngine:343 - Generated code: /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Inc/stm32g0xx_hal_conf.h
+2025-04-22 14:40:05,910 [INFO] CodeEngine:263 - oldGeneratedFile, /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Inc/main.h_save
+2025-04-22 14:40:06,016 [INFO] CodeEngine:287 - Generated code: /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Inc/main.h
+2025-04-22 14:40:06,020 [INFO] CodeEngine:263 - oldGeneratedFile, /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Src/main.c_save
+2025-04-22 14:40:06,403 [INFO] CodeEngine:287 - Generated code: /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Src/main.c
+2025-04-22 14:40:06,838 [INFO] ProjectBuilder:3324 - Time for Copy HAL[1] : 123mS.
+2025-04-22 14:40:06,841 [INFO] ProjectBuilder:4912 - Project Generator version: 4.6.0-B36
+2025-04-22 14:40:06,968 [INFO] ConfigFileManager:1590 - The Die is : DIE466
+2025-04-22 14:40:08,026 [INFO] ProjectBuilder:5191 - Time for Generating toolchain IDE Files: 1185mS.
+2025-04-22 14:40:08,027 [INFO] ProjectBuilder:3181 - Time for Copy CMSIS : 1mS.
+2025-04-22 14:40:08,028 [INFO] ProjectBuilder:3181 - Time for Copy CMSIS : 0mS.
