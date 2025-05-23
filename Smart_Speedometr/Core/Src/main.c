@@ -21,7 +21,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdio.h>
 #include "ssd1306.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -32,6 +34,18 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 //#define ADDR_CALIBR_VREF ((uint16_t*) ((uint32_t) 0x1FFF75AA))
+
+#define INCH20_WHEEL 1595 // meters 10^-3
+#define INCH24_WHEEL 1915 // meters 10^-3
+#define INCH26_WHEEL 2074 // meters 10^-3
+#define INCH27_WHEEL 2154 // meters 10^-3
+#define INCH28_WHEEL 2234 // meters 10^-3
+#define INCH29_WHEEL 2314 // meters 10^-3
+
+#define DELAY 200 // ms
+
+#define SMOOTH_SPEED_A 		40
+#define SMOOTH_SPEED_DEL 	(100-SMOOTH_SPEED_A)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -41,64 +55,68 @@
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
+DMA_HandleTypeDef hdma_adc1;
 
 I2C_HandleTypeDef hi2c1;
 
 RTC_HandleTypeDef hrtc;
 
-TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim14;
 TIM_HandleTypeDef htim16;
-TIM_HandleTypeDef htim17;
 
 /* USER CODE BEGIN PV */
 
 RTC_TimeTypeDef sTime;
 RTC_DateTypeDef sDate;
-ADC_ChannelConfTypeDef sConfig;
+//ADC_ChannelConfTypeDef sConfig;
 
 //uint8_t buf[18];
 char buf[20];
 
 //uint8_t x = 0, y = 30;
 
-uint16_t adc[2];
+volatile uint16_t adc[2];
 
-uint8_t sw1 = 0, sw2 = 0, sw3 = 0, tim17 = 1,  tim3 = 1;
-uint8_t config = 0, accept = 0;
+uint16_t smooth_speed;
+uint16_t speed;
+
+uint8_t sw1 = 0, sw2 = 0, sw3 = 0,  tim3 = 1, watchdog = 0;
+uint8_t config = 0;  //, accept = 0;
 //uint16_t tim16 = 0;
-uint8_t size = 20;
+uint16_t size = INCH26_WHEEL;
 int8_t con = 0;
 
-float speed, smooth_speed = 0;;
+//float speed, smooth_speed = 0;;
 uint8_t impuls = 0;
-uint16_t duration = 2000;
+uint16_t duration = 5000;
 
 uint16_t dead_zone, direct_zone;
 uint16_t del = 400;
+
+
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_RTC_Init(void);
-static void MX_TIM17_Init(void);
 static void MX_TIM16_Init(void);
 static void MX_TIM14_Init(void);
 static void MX_TIM3_Init(void);
-static void MX_TIM1_Init(void);
 /* USER CODE BEGIN PFP */
-void ADC_Select_CH3();
-void ADC_Select_CH5();
-void Hall_Sensor();
+//void ADC_Select_CH3();
+//void ADC_Select_CH5();
+//void Hall_Sensor();
 //float vrefint();
 
 void WriteTime();
-uint16_t BatteryCharge(uint16_t adc0);
-void WriteBatteryCharge();
+uint16_t BatteryCharge();
+void WriteBatteryCharge(uint16_t adc);
 
 void ConfigTime();
 /* USER CODE END PFP */
@@ -126,6 +144,36 @@ void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin){
 	if(GPIO_Pin == Sw3_Pin)
 		sw3 = 0;
 
+}
+
+//void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+//{
+//
+//}
+void HAL_ADC_LevelOutOfWindowCallback(ADC_HandleTypeDef* hadc)
+{
+//if(tim3){
+	//if(watchdog){
+	if(tim3)
+	impuls = 1;
+	else
+	 impuls = 0;
+//
+//	tim3 = 0;
+//	TIM3->CNT = 0;
+//	TIM3->SR &= ~TIM_SR_UIF;
+//	TIM3->ARR = 29;
+//
+//	HAL_TIM_Base_Start_IT(&htim3);
+//}
+//else
+//	impuls = 0;
+//
+//	}
+//	else{
+//		first_impuls = 1;
+//		watchdog = 1;
+//	}
 }
 /* USER CODE END 0 */
 
@@ -158,14 +206,13 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_I2C1_Init();
   MX_ADC1_Init();
   MX_RTC_Init();
-  MX_TIM17_Init();
   MX_TIM16_Init();
   MX_TIM14_Init();
   MX_TIM3_Init();
-  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
   ssd1306_Init();
     ssd1306_FlipScreenVertically();
@@ -178,9 +225,10 @@ int main(void)
 
 //float vref = vrefint();
 
-HAL_TIM_Base_Start_IT(&htim17);
 
-Hall_Sensor();
+HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc, 2);
+
+//Hall_Sensor();
 
 dead_zone = adc[1];
 direct_zone = 250;
@@ -190,10 +238,13 @@ direct_zone = 250;
 
 	  if(sw1 && sw3){
 		  HAL_TIM_Base_Start(&htim16);
-		  if(TIM16->CNT >= 1500)
+		  if(TIM16->CNT >= 1500){
 			  config = 1;
-		  else
-			  accept = 1;
+			  sw1 = 0;
+			  sw3 = 0;
+		  }
+		  //else
+			  //accept = 1;
 
 	  }
 	  else if(sw1 && sw2 && sw3)
@@ -201,18 +252,22 @@ direct_zone = 250;
 	  else{
 		  HAL_TIM_Base_Stop(&htim16);
 		  TIM16->CNT = 0;
-		  accept = 0;
+		  //accept = 0;
 	  }
 
 
-	  Hall_Sensor();
+	 // Hall_Sensor();
 switch (config){
 case(0):
 WriteTime();
 
-adc[0] = BatteryCharge(adc[0]);
 
-WriteBatteryCharge();
+
+//adc[0] = BatteryCharge(adc[0]);
+
+//BatteryCharge();
+//uint8_t battery = BatteryCharge();
+WriteBatteryCharge(BatteryCharge());
 
 
 
@@ -220,11 +275,27 @@ WriteBatteryCharge();
 //HAL_TIM_Base_Start(&htim1);
 //duration = TIM1->CNT;
 
-if(tim3){
-int16_t delta = dead_zone - adc[1];
-	if(abs(delta) > direct_zone){
-dead_zone = adc[1];
-	if(impuls){
+//if(tim3){
+//int16_t delta = dead_zone - adc[1];
+//	if(abs(delta) > direct_zone){
+//dead_zone = adc[1];
+
+if((impuls  && tim3) || (duration  > 6000)){
+
+static uint8_t  timer;
+
+//if(impuls){
+if(duration > 6000){
+	HAL_TIM_Base_Stop(&htim14);
+	duration = 5000;
+	TIM14->CNT = 0;
+	timer = 0;
+}
+
+else{
+
+
+	if(timer){
 duration = TIM14->CNT;
 TIM14->CNT = 0;
 
@@ -233,57 +304,100 @@ TIM14->CNT = 0;
 		TIM14->CNT = 0;
 		TIM14->SR &= ~TIM_SR_UIF;
 		HAL_TIM_Base_Start(&htim14);
-		impuls = 1 ;
+		timer = 1;
+
 	}
 
-}
-tim3 = 0;
-TIM3->CNT = 0;
-TIM3->SR &= ~TIM_SR_UIF;
-TIM3->ARR = 29;
-del = 0.1855f*duration + 28.86f;
-TIM3->ARR = 0.1809f*duration + 38.19f;
 
-HAL_TIM_Base_Start_IT(&htim3);
-}
+//}
+	tim3 = 0;
+	TIM3->CNT = 0;
+	TIM3->SR &= ~TIM_SR_UIF;
+	TIM3->ARR = 29;
 
-if(TIM14->CNT > duration + 1500 ){
+	impuls = 0;
 
-	if(duration  > 3000){
-		impuls = 0;
-		duration = 2000;
-		HAL_TIM_Base_Stop(&htim14);
-		TIM14->CNT =  0;
+	//del = 0.1855f*duration + 28.86f;
+	//TIM3->ARR = 0.1809f*duration + 38.19f;
+
+	HAL_TIM_Base_Start_IT(&htim3);
+
 	}
-	else
-		duration = duration +duration/50;
 }
 
-if(impuls && duration > 0){
-speed = ((uint8_t)size * 0.0254f)*3.14f;
-speed = speed / (uint16_t)duration;
-speed = impuls*(speed *1000);
-speed = speed * 3.6f;
+if(TIM14->CNT > duration)
+ duration = TIM14->CNT;
 
-smooth_speed = 0.01f*(float)speed+(1.0f-0.01f)*smooth_speed;
 
-uint16_t real_speed1 = (float)smooth_speed; // 50.5*10=505
-//uint16_t real_speed2 = real_speed1 / 10; // 50
-//real_speed2 = real_speed1  - real_speed2*10; // 505 - 500  = 5
-//real_speed1 = real_speed1 / 10;
-uint16_t real_speed2 = (uint16_t)(smooth_speed*10.0f) % 10; // 50
+
+//duration = (TIM14-CNT > duration) ? (duration = TIM14-CNT) : (duration = duration);
+
+//}
+//tim3 = 0;
+//TIM3->CNT = 0;
+//TIM3->SR &= ~TIM_SR_UIF;
+//TIM3->ARR = 29;
+////del = 0.1855f*duration + 28.86f;
+////TIM3->ARR = 0.1809f*duration + 38.19f;
+//
+//HAL_TIM_Base_Start_IT(&htim3);
+//}
+
+//if(TIM14->CNT > duration + 1500 ){
+//
+//	if(duration  > 3200){
+//		impuls = 0;
+//		duration = 3200;
+//		HAL_TIM_Base_Stop(&htim14);
+//		TIM14->CNT =  0;
+//	}
+//	else
+//		duration = duration +duration/50;
+//}
+
+
+
+
+if(duration < 5000){
+
+speed = (size * 360)/duration  ;  // size = ? * 10^-3 ... speed = ... *10^3 -> del 10^+-3
+//speed = speed*100;
+//float speed = (uint8_t)size * 0.0797f; // 0.0254f*3.14f = 0.0797
+//speed = speed / (uint16_t)duration;
+//speed = speed *1000 * 3.6f;
+
+
+smooth_speed = (SMOOTH_SPEED_A * speed + SMOOTH_SPEED_DEL * smooth_speed)/10;
+
+//float smooth_speed = 0.01f*(float)speed+(1.0f-0.01f)*smooth_speed;
+
+//uint16_t real_speed1 = (float)smooth_speed; // 50.5*10=505
+//
+//uint16_t real_speed2 = (uint16_t)(smooth_speed*10.0f) % 10; // 50
+
+uint8_t real_speed1 = (uint16_t)smooth_speed/10; // 50.5*10=505
+
+uint8_t real_speed2 = (uint16_t)smooth_speed % 10; // 50
+
 ssd1306_SetCursor(9, 25);
 	 snprintf(buf, sizeof(buf), "%d.%dkh/h", real_speed1, real_speed2);
 	 ssd1306_WriteString(buf, Font_11x18);
 }
+
 else{
 	ssd1306_SetCursor(20, 25);
-	snprintf(buf, sizeof(buf), "0 kh/h");
+	snprintf(buf, sizeof(buf), "0.0 kh/h");
 	ssd1306_WriteString(buf, Font_11x18);
 }
+
+
+
+
 //if(speed > 300){
 //	speed++;
 //}
+
+
 	 break;
 
 
@@ -296,7 +410,7 @@ else if(sw3 && tim3){
 	tim3 = 0;
 	TIM3->CNT = 0;
 	TIM3->SR &= ~TIM_SR_UIF;
-	TIM3->ARR = 300;
+	TIM3->ARR = DELAY;
 	HAL_TIM_Base_Start_IT(&htim3);
 }
 else if(sw1 && tim3){
@@ -304,7 +418,7 @@ else if(sw1 && tim3){
 	tim3 = 0;
 	TIM3->CNT = 0;
 	TIM3->SR &= ~TIM_SR_UIF;
-	TIM3->ARR = 300;
+	TIM3->ARR = DELAY;
 	HAL_TIM_Base_Start_IT(&htim3);
 }
 
@@ -334,7 +448,7 @@ case(0): //Config Time
 			tim3 = 0;
 			TIM3->CNT = 0;
 			TIM3->SR &= ~TIM_SR_UIF;
-			TIM3->ARR = 300;
+			TIM3->ARR = DELAY;
 			HAL_TIM_Base_Start_IT(&htim3);
 
 			//HAL_Delay(200);
@@ -355,10 +469,12 @@ case(1): //Config Size
 		if(sw2 && tim3){
 			config = 3;
 
+			size = 0;
+
 			tim3 = 0;
 			TIM3->CNT = 0;
 			TIM3->SR &= ~TIM_SR_UIF;
-			TIM3->ARR = 300;
+			TIM3->ARR = DELAY;
 			HAL_TIM_Base_Start_IT(&htim3);
 
 			//HAL_Delay(200);
@@ -381,7 +497,7 @@ case(2): //Config Calibration
 			tim3 = 0;
 			TIM3->CNT = 0;
 			TIM3->SR &= ~TIM_SR_UIF;
-			TIM3->ARR = 300;
+			TIM3->ARR = DELAY;
 			HAL_TIM_Base_Start_IT(&htim3);
 
 			//HAL_Delay(200);
@@ -393,33 +509,66 @@ case(2):
 		ConfigTime();
 		break;
 case(3): //Size
+		//uint8_t
+uint8_t table_of_size[6] = {20, 24, 26, 27, 28, 29};
+
+		static int8_t sizes;
+
 		if(sw2 && tim3){
 			config = 0;
+
+			switch(sizes){
+			case (0) :
+		size = INCH20_WHEEL;
+				break;
+			case (1) :
+		size = INCH24_WHEEL;
+				break;
+			case (2) :
+		size = INCH26_WHEEL;
+				break;
+			case (3) :
+		size = INCH27_WHEEL;
+				break;
+			case (4) :
+		size = INCH28_WHEEL;
+				break;
+			case (5) :
+		size = INCH29_WHEEL;
+				break;
+			}
+
 
 			tim3 = 0;
 			TIM3->CNT = 0;
 			TIM3->SR &= ~TIM_SR_UIF;
-			TIM3->ARR = 300;
+			TIM3->ARR = DELAY;
 			HAL_TIM_Base_Start_IT(&htim3);
 
 			break;
 
 		}
 		else if(sw3 && tim3){
-			size++;
+			sizes++;
+			if(sizes > 5)
+				sizes = 0;
+
 			tim3 = 0;
 			TIM3->CNT = 0;
 			TIM3->SR &= ~TIM_SR_UIF;
-			TIM3->ARR = 300;
+			TIM3->ARR = DELAY;
 			HAL_TIM_Base_Start_IT(&htim3);
 		}
 
-		else if(sw1){
-			size--;
+		else if(sw1 && tim3){
+			sizes--;
+			if(sizes < 0)
+				sizes = 5;
+
 			tim3 = 0;
 			TIM3->CNT = 0;
 			TIM3->SR &= ~TIM_SR_UIF;
-			TIM3->ARR = 300;
+			TIM3->ARR = DELAY;
 			HAL_TIM_Base_Start_IT(&htim3);
 		}
 
@@ -429,7 +578,7 @@ case(3): //Size
 		ssd1306_WriteString(buf, Font_11x18);
 
 		ssd1306_SetCursor(0, 39);
-		sprintf(buf, "Size:%dinch", size);
+		sprintf(buf, "Size:%dinch", table_of_size[sizes]);
 		ssd1306_WriteString(buf, Font_11x18);
 
 
@@ -443,7 +592,7 @@ case(4): // Calibration
 				tim3 = 0;
 				TIM3->CNT = 0;
 				TIM3->SR &= ~TIM_SR_UIF;
-				TIM3->ARR = 300;
+				TIM3->ARR = DELAY;
 				HAL_TIM_Base_Start_IT(&htim3);
 			}
 			if(con == 2){
@@ -462,7 +611,7 @@ case(4): // Calibration
 			if(sw2 && tim3){
 				direct_zone = adc[1];
 				config = 0;
-				duration = 0;
+				//duration = 0;
 
 				direct_zone = (direct_zone > dead_zone)?((direct_zone - dead_zone)/3) : ((dead_zone - direct_zone)/3);
 			}
@@ -521,9 +670,9 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
   RCC_OscInitStruct.PLL.PLLM = RCC_PLLM_DIV1;
-  RCC_OscInitStruct.PLL.PLLN = 16;
-  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-  RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV4;
+  RCC_OscInitStruct.PLL.PLLN = 8;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV8;
+  RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV8;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -534,7 +683,7 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV4;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
@@ -555,6 +704,7 @@ static void MX_ADC1_Init(void)
 
   /* USER CODE END ADC1_Init 0 */
 
+  ADC_AnalogWDGConfTypeDef AnalogWDGConfig = {0};
   ADC_ChannelConfTypeDef sConfig = {0};
 
   /* USER CODE BEGIN ADC1_Init 1 */
@@ -564,18 +714,19 @@ static void MX_ADC1_Init(void)
   /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
   */
   hadc1.Instance = ADC1;
-  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV4;
   hadc1.Init.Resolution = ADC_RESOLUTION_12B;
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  hadc1.Init.ScanConvMode = ADC_SCAN_ENABLE;
   hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
   hadc1.Init.LowPowerAutoWait = DISABLE;
   hadc1.Init.LowPowerAutoPowerOff = DISABLE;
   hadc1.Init.ContinuousConvMode = ENABLE;
-  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.NbrOfConversion = 2;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
   hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
-  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.DMAContinuousRequests = ENABLE;
   hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
   hadc1.Init.SamplingTimeCommon1 = ADC_SAMPLETIME_160CYCLES_5;
   hadc1.Init.SamplingTimeCommon2 = ADC_SAMPLETIME_1CYCLE_5;
@@ -586,11 +737,34 @@ static void MX_ADC1_Init(void)
     Error_Handler();
   }
 
+  /** Configure Analog WatchDog 1
+  */
+  AnalogWDGConfig.WatchdogNumber = ADC_ANALOGWATCHDOG_1;
+  AnalogWDGConfig.WatchdogMode = ADC_ANALOGWATCHDOG_SINGLE_REG;
+  AnalogWDGConfig.Channel = ADC_CHANNEL_5;
+  AnalogWDGConfig.ITMode = ENABLE;
+  AnalogWDGConfig.HighThreshold = 2800;
+  AnalogWDGConfig.LowThreshold = 2000;
+  if (HAL_ADC_AnalogWDGConfig(&hadc1, &AnalogWDGConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
   /** Configure Regular Channel
   */
   sConfig.Channel = ADC_CHANNEL_3;
   sConfig.Rank = ADC_REGULAR_RANK_1;
   sConfig.SamplingTime = ADC_SAMPLINGTIME_COMMON_1;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_5;
+  sConfig.Rank = ADC_REGULAR_RANK_2;
+  sConfig.SamplingTime = ADC_SAMPLINGTIME_COMMON_2;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -691,53 +865,6 @@ static void MX_RTC_Init(void)
 }
 
 /**
-  * @brief TIM1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM1_Init(void)
-{
-
-  /* USER CODE BEGIN TIM1_Init 0 */
-
-  /* USER CODE END TIM1_Init 0 */
-
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-
-  /* USER CODE BEGIN TIM1_Init 1 */
-
-  /* USER CODE END TIM1_Init 1 */
-  htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 31999;
-  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 0xFFFF;
-  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim1.Init.RepetitionCounter = 0;
-  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM1_Init 2 */
-
-  /* USER CODE END TIM1_Init 2 */
-
-}
-
-/**
   * @brief TIM3 Initialization Function
   * @param None
   * @retval None
@@ -756,7 +883,7 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 31999;
+  htim3.Init.Prescaler = 15999;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim3.Init.Period = 59;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -798,7 +925,7 @@ static void MX_TIM14_Init(void)
 
   /* USER CODE END TIM14_Init 1 */
   htim14.Instance = TIM14;
-  htim14.Init.Prescaler = 31999;
+  htim14.Init.Prescaler = 15999;
   htim14.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim14.Init.Period = 0xFFFF;
   htim14.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -829,7 +956,7 @@ static void MX_TIM16_Init(void)
 
   /* USER CODE END TIM16_Init 1 */
   htim16.Instance = TIM16;
-  htim16.Init.Prescaler = 31999;
+  htim16.Init.Prescaler = 15999;
   htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim16.Init.Period = 0xFFFF;
   htim16.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -846,34 +973,18 @@ static void MX_TIM16_Init(void)
 }
 
 /**
-  * @brief TIM17 Initialization Function
-  * @param None
-  * @retval None
+  * Enable DMA controller clock
   */
-static void MX_TIM17_Init(void)
+static void MX_DMA_Init(void)
 {
 
-  /* USER CODE BEGIN TIM17_Init 0 */
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
 
-  /* USER CODE END TIM17_Init 0 */
-
-  /* USER CODE BEGIN TIM17_Init 1 */
-
-  /* USER CODE END TIM17_Init 1 */
-  htim17.Instance = TIM17;
-  htim17.Init.Prescaler = 3999;
-  htim17.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim17.Init.Period = 1999;
-  htim17.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim17.Init.RepetitionCounter = 0;
-  htim17.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim17) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM17_Init 2 */
-
-  /* USER CODE END TIM17_Init 2 */
+  /* DMA interrupt init */
+  /* DMA1_Channel1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
 
 }
 
@@ -919,27 +1030,27 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void ADC_Select_CH3(){
-
-	 sConfig.Channel = ADC_CHANNEL_3;
-	 sConfig.Rank = ADC_REGULAR_RANK_1;
-	 sConfig.SamplingTime = ADC_SAMPLINGTIME_COMMON_1;
-	 if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
-	 {
-	 	Error_Handler();
-	 }
-}
-void ADC_Select_CH5(){
-
-	 sConfig.Channel = ADC_CHANNEL_5;
-	 sConfig.Rank = ADC_REGULAR_RANK_1;
-	 sConfig.SamplingTime = ADC_SAMPLINGTIME_COMMON_2;
-	 if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
-	 {
-	 	Error_Handler();
-	 }
-
-}
+//void ADC_Select_CH3(){
+//
+//	 sConfig.Channel = ADC_CHANNEL_3;
+//	 sConfig.Rank = ADC_REGULAR_RANK_1;
+//	 sConfig.SamplingTime = ADC_SAMPLINGTIME_COMMON_1;
+//	 if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+//	 {
+//	 	Error_Handler();
+//	 }
+//}
+//void ADC_Select_CH5(){
+//
+//	 sConfig.Channel = ADC_CHANNEL_5;
+//	 sConfig.Rank = ADC_REGULAR_RANK_1;
+//	 sConfig.SamplingTime = ADC_SAMPLINGTIME_COMMON_2;
+//	 if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+//	 {
+//	 	Error_Handler();
+//	 }
+//
+//}
 
 void WriteTime(){
 	HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN);
@@ -973,34 +1084,56 @@ void WriteTime(){
 		        //memset(buf, 0, sizeof(buf));
 }
 
-uint16_t BatteryCharge(uint16_t adc0){
-	uint16_t adc;
-	if(tim17 % 2 == 0){
+uint16_t BatteryCharge(){
+	static uint16_t adc1;
+	static uint8_t once_minute, access;
+	//if(tim17 % 2 == 0){
 
-		 ADC_Select_CH3();
-		 HAL_ADC_Start(&hadc1);
-		 HAL_ADC_PollForConversion(&hadc1, 100);
-		 adc = HAL_ADC_GetValue(&hadc1);
-		 if(adc > 2050){
-		 adc -= 2050;
-		 adc *= 0.175f;
+//		 ADC_Select_CH3();
+//		 HAL_ADC_Start(&hadc1);
+//		 HAL_ADC_PollForConversion(&hadc1, 100);
+//		 adc = HAL_ADC_GetValue(&hadc1);
+		//
+
+
+	if(access){
+		adc1 = adc[0];
+		//
+		 if(adc1 > 2050){
+		 adc1 -= 2050;
+		 adc1 *= 0.175f;
 		 }
 		 else
-		adc = 0;
+		adc1 = 0;
 
-		 HAL_ADC_Stop(&hadc1);
-	tim17 = 1;
-		}
-	else{
-		return adc0;
+		 once_minute = sTime.Minutes;
+		 access = 0;
 	}
-	return adc;
+
+	if(sTime.Minutes != once_minute)
+			access = 1;
+//	else{
+//		once_minute = sTime.Minutes;
+//		access = 0;
+//	}
+		// HAL_ADC_Stop(&hadc1);
+	//tim17 = 1;
+//		}
+//	else{
+//
+//		return adc;
+//	}
+	if(adc1 >= 100)
+	adc1 = 100;
+
+	return adc1;
 }
 
 
-void WriteBatteryCharge(){
+void WriteBatteryCharge(uint16_t adc){
+
 	ssd1306_SetCursor(100, 0);
-		 sprintf(buf, "%d", adc[0]);
+		 sprintf(buf, "%d", adc);
 		 ssd1306_WriteString(buf, Font_7x10);
 		 ssd1306_WriteChar('%', Font_7x10);
 		 //memset(buf, 0, sizeof(buf));
@@ -1034,10 +1167,10 @@ void ConfigTime(){
 					        ssd1306_WriteString(buf, Font_7x10);
 					      //  memset(buf, 0, sizeof(buf));
 
-					if(accept){
+					if(sw1 && sw3){
 					if (HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BIN) != HAL_OK)
 					        Error_Handler();
-					    accept = 0;
+					    //accept = 0;
 					    config = 0;
 					}
 					else{
@@ -1049,7 +1182,7 @@ void ConfigTime(){
 						tim3 = 0;
 						TIM3->CNT = 0;
 						TIM3->SR &= ~TIM_SR_UIF;
-						TIM3->ARR = 300;
+						TIM3->ARR = 200;
 						HAL_TIM_Base_Start_IT(&htim3);
 
 					}
@@ -1061,7 +1194,7 @@ void ConfigTime(){
 						tim3 = 0;
 						TIM3->CNT = 0;
 						TIM3->SR &= ~TIM_SR_UIF;
-						TIM3->ARR = 300;
+						TIM3->ARR = 200;
 						HAL_TIM_Base_Start_IT(&htim3);
 					}
 					if(sw1 && tim3){
@@ -1072,20 +1205,20 @@ void ConfigTime(){
 						tim3 = 0;
 						TIM3->CNT = 0;
 						TIM3->SR &= ~TIM_SR_UIF;
-						TIM3->ARR = 300;
+						TIM3->ARR = 200;
 						HAL_TIM_Base_Start_IT(&htim3);
 					}
 					}
 
 }
 
-void Hall_Sensor(){
-	ADC_Select_CH5();
-		 HAL_ADC_Start(&hadc1);
-		 //if( HAL_ADC_PollForConversion(&hadc1, 5) == HAL_OK)
-		 adc[1] = HAL_ADC_GetValue(&hadc1);
-		 HAL_ADC_Stop(&hadc1);
-}
+//void Hall_Sensor(){
+//	ADC_Select_CH5();
+//		 HAL_ADC_Start(&hadc1);
+//		 //if( HAL_ADC_PollForConversion(&hadc1, 5) == HAL_OK)
+//		 adc[1] = HAL_ADC_GetValue(&hadc1);
+//		 HAL_ADC_Stop(&hadc1);
+//}
 //float vrefint(){
 //uint16_t vrefint = *ADDR_CALIBR_VREF;
 //    HAL_ADCEx_Calibration_Start(&hadc1);
