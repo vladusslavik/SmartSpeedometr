@@ -44,7 +44,7 @@
 
 #define DELAY 200 // ms
 
-#define SMOOTH_SPEED_A 		40
+#define SMOOTH_SPEED_A 		1
 #define SMOOTH_SPEED_DEL 	(100-SMOOTH_SPEED_A)
 /* USER CODE END PD */
 
@@ -78,21 +78,19 @@ char buf[20];
 
 volatile uint16_t adc[2];
 
-uint16_t smooth_speed;
-uint16_t speed;
+uint16_t smooth_speed = 0;
+uint16_t speed = 0;
 
-uint8_t sw1 = 0, sw2 = 0, sw3 = 0,  tim3 = 1, watchdog = 0;
-uint8_t config = 0;  //, accept = 0;
-//uint16_t tim16 = 0;
+uint8_t sw1 = 0, sw2 = 0, sw3 = 0,  tim3 = 1;
+uint8_t config = 0;
+
 uint16_t size = INCH26_WHEEL;
-int8_t con = 0;
+//int8_t con = 0;
 
-//float speed, smooth_speed = 0;;
 uint8_t impuls = 0;
 uint16_t duration = 5000;
 
 uint16_t dead_zone, direct_zone;
-uint16_t del = 400;
 
 
 
@@ -115,10 +113,13 @@ static void MX_TIM3_Init(void);
 //float vrefint();
 
 void WriteTime();
+void ConfigTime();
+
 uint16_t BatteryCharge();
 void WriteBatteryCharge(uint16_t adc);
 
-void ConfigTime();
+void DetectImpuls();
+void CalculateSpeed();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -146,34 +147,15 @@ void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin){
 
 }
 
-//void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
-//{
-//
-//}
+
 void HAL_ADC_LevelOutOfWindowCallback(ADC_HandleTypeDef* hadc)
 {
-//if(tim3){
-	//if(watchdog){
+
 	if(tim3)
 	impuls = 1;
 	else
 	 impuls = 0;
-//
-//	tim3 = 0;
-//	TIM3->CNT = 0;
-//	TIM3->SR &= ~TIM_SR_UIF;
-//	TIM3->ARR = 29;
-//
-//	HAL_TIM_Base_Start_IT(&htim3);
-//}
-//else
-//	impuls = 0;
-//
-//	}
-//	else{
-//		first_impuls = 1;
-//		watchdog = 1;
-//	}
+
 }
 /* USER CODE END 0 */
 
@@ -182,7 +164,7 @@ void HAL_ADC_LevelOutOfWindowCallback(ADC_HandleTypeDef* hadc)
   * @retval int
   */
 int main(void)
-{
+ {
 
   /* USER CODE BEGIN 1 */
 
@@ -223,16 +205,12 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-//float vref = vrefint();
-
-
 HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc, 2);
 
-//Hall_Sensor();
 
 dead_zone = adc[1];
 direct_zone = 250;
-//direct_zone = dead_zone + 400;
+
   while (1)
   {
 
@@ -243,168 +221,36 @@ direct_zone = 250;
 			  sw1 = 0;
 			  sw3 = 0;
 		  }
-		  //else
-			  //accept = 1;
+
 
 	  }
-	  else if(sw1 && sw2 && sw3)
-	  		  config = 0;
+//	  else if(sw1 && sw2 && sw3)
+//	  		  config = 0;
 	  else{
 		  HAL_TIM_Base_Stop(&htim16);
 		  TIM16->CNT = 0;
-		  //accept = 0;
 	  }
 
-
-	 // Hall_Sensor();
 switch (config){
 case(0):
 WriteTime();
 
-
-
-//adc[0] = BatteryCharge(adc[0]);
-
-//BatteryCharge();
-//uint8_t battery = BatteryCharge();
 WriteBatteryCharge(BatteryCharge());
 
-
-
-//duration = TIM1->CNT;
-//HAL_TIM_Base_Start(&htim1);
-//duration = TIM1->CNT;
-
-//if(tim3){
-//int16_t delta = dead_zone - adc[1];
-//	if(abs(delta) > direct_zone){
-//dead_zone = adc[1];
-
-if((impuls  && tim3) || (duration  > 6000)){
-
-static uint8_t  timer;
-
-//if(impuls){
-if(duration > 6000){
-	HAL_TIM_Base_Stop(&htim14);
-	duration = 5000;
-	TIM14->CNT = 0;
-	timer = 0;
-}
-
-else{
-
-
-	if(timer){
-duration = TIM14->CNT;
-TIM14->CNT = 0;
-
-	}
-	else{
-		TIM14->CNT = 0;
-		TIM14->SR &= ~TIM_SR_UIF;
-		HAL_TIM_Base_Start(&htim14);
-		timer = 1;
-
-	}
-
-
-//}
-	tim3 = 0;
-	TIM3->CNT = 0;
-	TIM3->SR &= ~TIM_SR_UIF;
-	TIM3->ARR = 29;
-
-	impuls = 0;
-
-	//del = 0.1855f*duration + 28.86f;
-	//TIM3->ARR = 0.1809f*duration + 38.19f;
-
-	HAL_TIM_Base_Start_IT(&htim3);
-
-	}
-}
-
-if(TIM14->CNT > duration)
- duration = TIM14->CNT;
-
-
-
-//duration = (TIM14-CNT > duration) ? (duration = TIM14-CNT) : (duration = duration);
-
-//}
-//tim3 = 0;
-//TIM3->CNT = 0;
-//TIM3->SR &= ~TIM_SR_UIF;
-//TIM3->ARR = 29;
-////del = 0.1855f*duration + 28.86f;
-////TIM3->ARR = 0.1809f*duration + 38.19f;
-//
-//HAL_TIM_Base_Start_IT(&htim3);
-//}
-
-//if(TIM14->CNT > duration + 1500 ){
-//
-//	if(duration  > 3200){
-//		impuls = 0;
-//		duration = 3200;
-//		HAL_TIM_Base_Stop(&htim14);
-//		TIM14->CNT =  0;
-//	}
-//	else
-//		duration = duration +duration/50;
-//}
-
-
-
-
-if(duration < 5000){
-
-speed = (size * 360)/duration  ;  // size = ? * 10^-3 ... speed = ... *10^3 -> del 10^+-3
-//speed = speed*100;
-//float speed = (uint8_t)size * 0.0797f; // 0.0254f*3.14f = 0.0797
-//speed = speed / (uint16_t)duration;
-//speed = speed *1000 * 3.6f;
-
-
-smooth_speed = (SMOOTH_SPEED_A * speed + SMOOTH_SPEED_DEL * smooth_speed)/10;
-
-//float smooth_speed = 0.01f*(float)speed+(1.0f-0.01f)*smooth_speed;
-
-//uint16_t real_speed1 = (float)smooth_speed; // 50.5*10=505
-//
-//uint16_t real_speed2 = (uint16_t)(smooth_speed*10.0f) % 10; // 50
-
-uint8_t real_speed1 = (uint16_t)smooth_speed/10; // 50.5*10=505
-
-uint8_t real_speed2 = (uint16_t)smooth_speed % 10; // 50
-
-ssd1306_SetCursor(9, 25);
-	 snprintf(buf, sizeof(buf), "%d.%dkh/h", real_speed1, real_speed2);
-	 ssd1306_WriteString(buf, Font_11x18);
-}
-
-else{
-	ssd1306_SetCursor(20, 25);
-	snprintf(buf, sizeof(buf), "0.0 kh/h");
-	ssd1306_WriteString(buf, Font_11x18);
-}
-
-
-
-
-//if(speed > 300){
-//	speed++;
-//}
-
+DetectImpuls();
+CalculateSpeed();
 
 	 break;
 
 
 case(1):
 
+static int8_t con;
+
+
 if(sw1 && sw3)
 	__NOP();
+
 else if(sw3 && tim3){
 	con++;
 	tim3 = 0;
@@ -413,6 +259,7 @@ else if(sw3 && tim3){
 	TIM3->ARR = DELAY;
 	HAL_TIM_Base_Start_IT(&htim3);
 }
+
 else if(sw1 && tim3){
 	con--;
 	tim3 = 0;
@@ -440,8 +287,7 @@ case(0): //Config Time
 		ssd1306_SetCursor(0, 38);
 		sprintf(buf, "Set size");
 		ssd1306_WriteString(buf, Font_11x18);
-//		if(accept)
-//		config = 2;
+
 		if(sw2 && tim3){
 			config = 2;
 
@@ -451,7 +297,6 @@ case(0): //Config Time
 			TIM3->ARR = DELAY;
 			HAL_TIM_Base_Start_IT(&htim3);
 
-			//HAL_Delay(200);
 		}
 		break;
 
@@ -477,7 +322,6 @@ case(1): //Config Size
 			TIM3->ARR = DELAY;
 			HAL_TIM_Base_Start_IT(&htim3);
 
-			//HAL_Delay(200);
 		}
 		break;
 
@@ -500,7 +344,6 @@ case(2): //Config Calibration
 			TIM3->ARR = DELAY;
 			HAL_TIM_Base_Start_IT(&htim3);
 
-			//HAL_Delay(200);
 		}
 		break;
 }
@@ -509,7 +352,7 @@ case(2):
 		ConfigTime();
 		break;
 case(3): //Size
-		//uint8_t
+
 uint8_t table_of_size[6] = {20, 24, 26, 27, 28, 29};
 
 		static int8_t sizes;
@@ -585,39 +428,53 @@ uint8_t table_of_size[6] = {20, 24, 26, 27, 28, 29};
 		break;
 case(4): // Calibration
 
-			if(sw2 && (con == 2) && tim3){
-				//HAL_Delay(300);
-				dead_zone = adc[1];
-				con = 3;
+static uint8_t zones;
+
+
+		if(zones){
+			ssd1306_SetCursor(17, 0);
+			sprintf(buf, "Set direct zone");
+			ssd1306_WriteString(buf, Font_7x10);
+
+
+			if(sw2 && tim3){
+
+				direct_zone = adc[1];
+
+				zones = 0;
+				config = 0;
+
+				direct_zone = (direct_zone > dead_zone)?(direct_zone - dead_zone) : (dead_zone - direct_zone);
+
 				tim3 = 0;
 				TIM3->CNT = 0;
 				TIM3->SR &= ~TIM_SR_UIF;
 				TIM3->ARR = DELAY;
 				HAL_TIM_Base_Start_IT(&htim3);
 			}
-			if(con == 2){
+
+			}
+		else{
 			ssd1306_SetCursor(17, 0);
 			sprintf(buf, "Set dead zone");
 			ssd1306_WriteString(buf, Font_7x10);
-			}
-			else{
-			ssd1306_SetCursor(17, 0);
-			sprintf(buf, "Set direct zone");
-			ssd1306_WriteString(buf, Font_7x10);
-			con = 3;
-
 
 
 			if(sw2 && tim3){
-				direct_zone = adc[1];
-				config = 0;
-				//duration = 0;
 
-				direct_zone = (direct_zone > dead_zone)?((direct_zone - dead_zone)/3) : ((dead_zone - direct_zone)/3);
+				dead_zone = adc[1];
+
+				zones = 1;
+
+				tim3 = 0;
+				TIM3->CNT = 0;
+				TIM3->SR &= ~TIM_SR_UIF;
+				TIM3->ARR = DELAY;
+				HAL_TIM_Base_Start_IT(&htim3);
 			}
 
 
-			}
+	}
 
 			ssd1306_SetCursor(6, 24);
 			sprintf(buf, "%d", adc[1]);
@@ -1212,32 +1069,77 @@ void ConfigTime(){
 
 }
 
-//void Hall_Sensor(){
-//	ADC_Select_CH5();
-//		 HAL_ADC_Start(&hadc1);
-//		 //if( HAL_ADC_PollForConversion(&hadc1, 5) == HAL_OK)
-//		 adc[1] = HAL_ADC_GetValue(&hadc1);
-//		 HAL_ADC_Stop(&hadc1);
-//}
-//float vrefint(){
-//uint16_t vrefint = *ADDR_CALIBR_VREF;
-//    HAL_ADCEx_Calibration_Start(&hadc1);
-//
-//	 sConfig.Channel = ADC_CHANNEL_VREFINT;
-//		 sConfig.Rank = ADC_REGULAR_RANK_1;
-//		 sConfig.SamplingTime = ADC_SAMPLETIME_160CYCLES_5;
-//		 if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
-//		 {
-//		 	Error_Handler();
-//		 }
-//		 HAL_ADC_Start(&hadc1);
-//		 float vref;
-//		 	 if( HAL_ADC_PollForConversion(&hadc1, 5) == HAL_OK)
-//		 	 vref = HAL_ADC_GetValue(&hadc1);
-//		 	 HAL_ADC_Stop(&hadc1);
-//		 	vref = (vrefint/ vref);
-//		 	return vref;
-//}
+
+void DetectImpuls(){
+	if((impuls  && tim3) || (duration  > 6000)){
+
+			static uint8_t  timer;
+
+				if(duration > 6000){
+					HAL_TIM_Base_Stop(&htim14);
+					duration = 5000;
+					TIM14->CNT = 0;
+					timer = 0;
+				}
+
+	else{
+
+			if(timer){
+				duration = TIM14->CNT;
+				TIM14->CNT = 0;
+			}
+			else{
+				TIM14->CNT = 0;
+				TIM14->SR &= ~TIM_SR_UIF;
+				HAL_TIM_Base_Start(&htim14);
+				timer = 1;
+			}
+	tim3 = 0;
+	TIM3->CNT = 0;
+	TIM3->SR &= ~TIM_SR_UIF;
+	TIM3->ARR = 29;
+
+	impuls = 0;
+
+	HAL_TIM_Base_Start_IT(&htim3);
+
+	}
+
+}
+}
+
+void CalculateSpeed(){
+
+	if(TIM14->CNT > duration)
+	 duration = TIM14->CNT;
+
+
+	if(duration < 5000){
+
+	speed = (size * 36)/duration  ;  // size = ? * 10^-3 ... speed = ... *10^3 -> del 10^+-3
+
+
+	smooth_speed = (SMOOTH_SPEED_A * speed + SMOOTH_SPEED_DEL * smooth_speed)/100;
+
+
+	uint8_t real_speed1 = (uint16_t)smooth_speed / 10;
+
+	uint8_t real_speed2 = (uint16_t)smooth_speed % 10;
+
+
+	ssd1306_SetCursor(9, 25);
+		 snprintf(buf, sizeof(buf), "%d.%dkh/h", real_speed1, real_speed2);
+		 ssd1306_WriteString(buf, Font_11x18);
+	}
+
+	else{
+		ssd1306_SetCursor(20, 25);
+		snprintf(buf, sizeof(buf), "0.0kh/h");
+		ssd1306_WriteString(buf, Font_11x18);
+	}
+
+}
+
 /* USER CODE END 4 */
 
 /**
