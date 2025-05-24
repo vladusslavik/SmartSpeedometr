@@ -222,10 +222,8 @@ direct_zone = 250;
 			  sw3 = 0;
 		  }
 
-
 	  }
-//	  else if(sw1 && sw2 && sw3)
-//	  		  config = 0;
+
 	  else{
 		  HAL_TIM_Base_Stop(&htim16);
 		  TIM16->CNT = 0;
