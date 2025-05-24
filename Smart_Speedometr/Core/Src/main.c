@@ -44,7 +44,7 @@
 
 #define DELAY 200 // ms
 
-#define SMOOTH_SPEED_A 		1
+#define SMOOTH_SPEED_A 		25
 #define SMOOTH_SPEED_DEL 	(100-SMOOTH_SPEED_A)
 /* USER CODE END PD */
 
@@ -69,28 +69,33 @@ TIM_HandleTypeDef htim16;
 
 RTC_TimeTypeDef sTime;
 RTC_DateTypeDef sDate;
-//ADC_ChannelConfTypeDef sConfig;
 
-//uint8_t buf[18];
-char buf[20];
 
-//uint8_t x = 0, y = 30;
+char buf[20]; // Buffer for sprintf
 
-volatile uint16_t adc[2];
+volatile uint16_t adc[2]; 	// Results of ADC with DMA
 
-uint16_t smooth_speed = 0;
-uint16_t speed = 0;
+volatile uint16_t smooth_speed = 0;  // Variable for regulation speed
+volatile uint16_t speed = 0;			// Actual speed
 
-uint8_t sw1 = 0, sw2 = 0, sw3 = 0,  tim3 = 1;
-uint8_t config = 0;
+volatile uint8_t sw1 = 0, sw2 = 0, sw3 = 0,  tim3 = 1;  	// Variables for buttons and timer 3 in order to avoid rattlesnake
+//uint8_t config = 0;							    // Variable for list
+typedef enum {
+	MAIN,
+	SETTINGS,
+	TIME,
+	SIZE,
+	CALIBRATION
+}Display;
+Display config = MAIN;
 
-uint16_t size = INCH26_WHEEL;
-//int8_t con = 0;
+uint16_t size = INCH26_WHEEL;					// Size of wheel
 
-uint8_t impuls = 0;
-uint16_t duration = 5000;
 
-uint16_t dead_zone, direct_zone;
+volatile uint8_t impulse = 0;								// Impulse from Hall sensor
+volatile uint16_t duration = 5025;						// Duration between impulse
+
+uint16_t dead_zone, direct_zone;				// Variables for calibration
 
 
 
@@ -107,24 +112,21 @@ static void MX_TIM16_Init(void);
 static void MX_TIM14_Init(void);
 static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
-//void ADC_Select_CH3();
-//void ADC_Select_CH5();
-//void Hall_Sensor();
-//float vrefint();
 
-void WriteTime();
-void ConfigTime();
 
-uint16_t BatteryCharge();
-void WriteBatteryCharge(uint16_t adc);
+void WriteTime();		// Show time on display
+void ConfigTime();		// Function for config time
 
-void DetectImpuls();
-void CalculateSpeed();
+uint16_t BatteryCharge();				// Measure Charge of battery
+void WriteBatteryCharge(uint16_t adc);	// Show Charge of battery
+
+void DetectImpulse();		// Function for detect impulses
+void CalculateSpeed();		// Function for calculating actual and smooth speed
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void HAL_GPIO_EXTI_Falling_Callback(uint16_t GPIO_Pin){
+void HAL_GPIO_EXTI_Falling_Callback(uint16_t GPIO_Pin){		// EXTI Handler Falling SWITCHERS
 	if(GPIO_Pin == Sw1_Pin)
 		sw1 =1 ;
 
@@ -135,7 +137,7 @@ void HAL_GPIO_EXTI_Falling_Callback(uint16_t GPIO_Pin){
 		sw3 = 1;
 
 }
-void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin){
+void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin){		// EXTI Handler Rising SWITCHERS
 	if(GPIO_Pin == Sw1_Pin)
 		sw1 = 0;
 
@@ -148,13 +150,13 @@ void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin){
 }
 
 
-void HAL_ADC_LevelOutOfWindowCallback(ADC_HandleTypeDef* hadc)
+void HAL_ADC_LevelOutOfWindowCallback(ADC_HandleTypeDef* hadc) 		// ADC Analog WatchDog Handler
 {
 
 	if(tim3)
-	impuls = 1;
+	impulse = 1;
 	else
-	 impuls = 0;
+	 impulse = 0;
 
 }
 /* USER CODE END 0 */
@@ -164,7 +166,7 @@ void HAL_ADC_LevelOutOfWindowCallback(ADC_HandleTypeDef* hadc)
   * @retval int
   */
 int main(void)
- {
+{
 
   /* USER CODE BEGIN 1 */
 
@@ -211,6 +213,8 @@ HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc, 2);
 dead_zone = adc[1];
 direct_zone = 250;
 
+
+volatile uint16_t time = 0;
   while (1)
   {
 
@@ -230,18 +234,28 @@ direct_zone = 250;
 	  }
 
 switch (config){
-case(0):
+
+case(MAIN):
 WriteTime();
 
 WriteBatteryCharge(BatteryCharge());
 
-DetectImpuls();
+time = TIM14->CNT;
+HAL_TIM_Base_Start(&htim14);
+time = 0;
+DetectImpulse();
 CalculateSpeed();
+
+if(sw2)
+	ssd1306_InvertDisplay();
+
+else if(sw1)
+	 ssd1306_NormalDisplay();
 
 	 break;
 
 
-case(1):
+case(SETTINGS):			// Settings
 
 static int8_t con;
 
@@ -346,10 +360,10 @@ case(2): //Config Calibration
 		break;
 }
 		break;
-case(2):
+case(TIME):
 		ConfigTime();
 		break;
-case(3): //Size
+case(SIZE): //Size
 
 uint8_t table_of_size[6] = {20, 24, 26, 27, 28, 29};
 
@@ -424,7 +438,7 @@ uint8_t table_of_size[6] = {20, 24, 26, 27, 28, 29};
 
 
 		break;
-case(4): // Calibration
+case(CALIBRATION): // Calibration
 
 static uint8_t zones;
 
@@ -598,7 +612,7 @@ static void MX_ADC1_Init(void)
   AnalogWDGConfig.WatchdogMode = ADC_ANALOGWATCHDOG_SINGLE_REG;
   AnalogWDGConfig.Channel = ADC_CHANNEL_5;
   AnalogWDGConfig.ITMode = ENABLE;
-  AnalogWDGConfig.HighThreshold = 2800;
+  AnalogWDGConfig.HighThreshold = 2300;
   AnalogWDGConfig.LowThreshold = 2000;
   if (HAL_ADC_AnalogWDGConfig(&hadc1, &AnalogWDGConfig) != HAL_OK)
   {
@@ -646,7 +660,7 @@ static void MX_I2C1_Init(void)
 
   /* USER CODE END I2C1_Init 1 */
   hi2c1.Instance = I2C1;
-  hi2c1.Init.Timing = 0x00200105;
+  hi2c1.Init.Timing = 0x00300617;
   hi2c1.Init.OwnAddress1 = 0;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
@@ -672,10 +686,6 @@ static void MX_I2C1_Init(void)
   {
     Error_Handler();
   }
-
-  /** I2C Fast mode Plus enable
-  */
-  HAL_I2CEx_EnableFastModePlus(I2C_FASTMODEPLUS_I2C1);
   /* USER CODE BEGIN I2C1_Init 2 */
 
   /* USER CODE END I2C1_Init 2 */
@@ -1068,14 +1078,14 @@ void ConfigTime(){
 }
 
 
-void DetectImpuls(){
-	if((impuls  && tim3) || (duration  > 6000)){
+void DetectImpulse(){
+	if((impulse  && tim3) || (TIM14->CNT  > 5050)){
 
-			static uint8_t  timer;
+		volatile static uint8_t  timer;
 
-				if(duration > 6000){
+				if(TIM14->CNT > 5050){
 					HAL_TIM_Base_Stop(&htim14);
-					duration = 5000;
+					duration = 5025;
 					TIM14->CNT = 0;
 					timer = 0;
 				}
@@ -1097,7 +1107,7 @@ void DetectImpuls(){
 	TIM3->SR &= ~TIM_SR_UIF;
 	TIM3->ARR = 29;
 
-	impuls = 0;
+	impulse = 0;
 
 	HAL_TIM_Base_Start_IT(&htim3);
 
@@ -1120,14 +1130,19 @@ void CalculateSpeed(){
 	smooth_speed = (SMOOTH_SPEED_A * speed + SMOOTH_SPEED_DEL * smooth_speed)/100;
 
 
-	uint8_t real_speed1 = (uint16_t)smooth_speed / 10;
+	volatile uint8_t real_speed1 = (uint16_t)smooth_speed / 10;
 
-	uint8_t real_speed2 = (uint16_t)smooth_speed % 10;
+	volatile uint8_t real_speed2 = (uint16_t)smooth_speed % 10;
 
 
-	ssd1306_SetCursor(9, 25);
+		 ssd1306_SetCursor(20, 25);
 		 snprintf(buf, sizeof(buf), "%d.%dkh/h", real_speed1, real_speed2);
 		 ssd1306_WriteString(buf, Font_11x18);
+//
+		 ssd1306_SetCursor(20, 45);
+		 snprintf(buf, sizeof(buf), "%d", duration);
+		 ssd1306_WriteString(buf, Font_11x18);
+		 //
 	}
 
 	else{
