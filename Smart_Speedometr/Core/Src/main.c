@@ -213,8 +213,6 @@ HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc, 2);
 dead_zone = adc[1];
 direct_zone = 250;
 
-
-volatile uint16_t time = 0;
   while (1)
   {
 
@@ -240,9 +238,7 @@ WriteTime();
 
 WriteBatteryCharge(BatteryCharge());
 
-time = TIM14->CNT;
-HAL_TIM_Base_Start(&htim14);
-time = 0;
+
 DetectImpulse();
 CalculateSpeed();
 
