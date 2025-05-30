@@ -31,7 +31,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define TIMER3 (1<<3)
+#define TIMER16 (1<<4)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -48,6 +49,13 @@
 /* USER CODE BEGIN PFP */
 extern uint8_t tim3;
 extern uint16_t tim16;
+extern uint16_t duration;
+extern uint8_t counter;
+
+extern uint8_t switchers;
+
+volatile extern uint16_t adc[2];
+//extern ADC_AnalogWDGConfTypeDef AnalogWDGConfig;
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -59,6 +67,9 @@ extern uint16_t tim16;
 extern DMA_HandleTypeDef hdma_adc1;
 extern ADC_HandleTypeDef hadc1;
 extern TIM_HandleTypeDef htim3;
+extern TIM_HandleTypeDef htim14;
+extern TIM_HandleTypeDef htim16;
+extern TIM_HandleTypeDef htim17;
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -208,14 +219,85 @@ void ADC1_IRQHandler(void)
 void TIM3_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM3_IRQn 0 */
-tim3 = 1;
-//if(tim3 > 1)
+	if(switchers & TIMER3){
+uint8_t a = 0;
+	}
+switchers |= TIMER3;
+//ADC1->CR |= ADC_CR_ADEN;
+//tim3 = 1;
+
+HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc, 2);
+
 HAL_TIM_Base_Stop_IT(&htim3);
+
+
+TIM3->CNT = 0;
+TIM3->SR &= ~TIM_SR_UIF;
+TIM3->ARR = 19999;
+
+HAL_TIM_Base_Start_IT(&htim3);
+
+//AnalogWDGConfig.ITMode = ENABLE;
+//if (HAL_ADC_AnalogWDGConfig(&hadc1, &AnalogWDGConfig) != HAL_OK)
+//  {
+//    Error_Handler();
+//  }
   /* USER CODE END TIM3_IRQn 0 */
   HAL_TIM_IRQHandler(&htim3);
   /* USER CODE BEGIN TIM3_IRQn 1 */
 
   /* USER CODE END TIM3_IRQn 1 */
+}
+
+/**
+  * @brief This function handles TIM14 global interrupt.
+  */
+void TIM14_IRQHandler(void)
+{
+  /* USER CODE BEGIN TIM14_IRQn 0 */
+	HAL_TIM_Base_Stop_IT(&htim14);
+	duration = 5025;
+	TIM14->CNT = 0;
+	counter = 0;
+  /* USER CODE END TIM14_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim14);
+  /* USER CODE BEGIN TIM14_IRQn 1 */
+
+  /* USER CODE END TIM14_IRQn 1 */
+}
+
+/**
+  * @brief This function handles TIM16 global interrupt.
+  */
+void TIM16_IRQHandler(void)
+{
+  /* USER CODE BEGIN TIM16_IRQn 0 */
+//switchers |= TIMER17;
+//	if(switchers & TIMER16)
+//		HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc, 2);
+
+switchers |= TIMER16;
+HAL_TIM_Base_Stop_IT(&htim16);
+  /* USER CODE END TIM16_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim16);
+  /* USER CODE BEGIN TIM16_IRQn 1 */
+
+  /* USER CODE END TIM16_IRQn 1 */
+}
+
+/**
+  * @brief This function handles TIM17 global interrupt.
+  */
+void TIM17_IRQHandler(void)
+{
+  /* USER CODE BEGIN TIM17_IRQn 0 */
+
+//	HAL_TIM_Base_Stop_IT(&htim17);
+  /* USER CODE END TIM17_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim17);
+  /* USER CODE BEGIN TIM17_IRQn 1 */
+
+  /* USER CODE END TIM17_IRQn 1 */
 }
 
 /* USER CODE BEGIN 1 */

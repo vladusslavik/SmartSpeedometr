@@ -1,2 +1,2 @@
 eclipse.preferences.version=1
-sfrviewstate={"fFavorites"\:{"fLists"\:{}},"fProperties"\:{"fNodeProperties"\:{}}}
+sfrviewstate={"fFavorites"\:{"fLists"\:{}},"fProperties"\:{"fNodeProperties"\:{"STM32G030/ADC/ADC_ISR"\:{"fNodeProperties"\:{"autoupdate"\:"true"}},"STM32G030/ADC/ADC_CR"\:{"fNodeProperties"\:{"autoupdate"\:"true"}},"STM32G030/TIM16/CNT"\:{"fNodeProperties"\:{"autoupdate"\:"true"}}}}}

@@ -42,7 +42,8 @@
 #define INCH28_WHEEL 2234 // meters 10^-3
 #define INCH29_WHEEL 2314 // meters 10^-3
 
-#define DELAY 200 // ms
+#define DELAY 200 		// ms
+#define DELAY_ADC 29 	// ms
 
 #define SMOOTH_SPEED_A 		25
 #define SMOOTH_SPEED_DEL 	(100-SMOOTH_SPEED_A)
@@ -64,12 +65,13 @@ RTC_HandleTypeDef hrtc;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim14;
 TIM_HandleTypeDef htim16;
+TIM_HandleTypeDef htim17;
 
 /* USER CODE BEGIN PV */
 
 RTC_TimeTypeDef sTime;
 RTC_DateTypeDef sDate;
-
+//ADC_AnalogWDGConfTypeDef AnalogWDGConfig;
 
 char buf[20]; // Buffer for sprintf
 
@@ -79,6 +81,13 @@ volatile uint16_t smooth_speed = 0;  // Variable for regulation speed
 volatile uint16_t speed = 0;			// Actual speed
 
 volatile uint8_t sw1 = 0, sw2 = 0, sw3 = 0,  tim3 = 1;  	// Variables for buttons and timer 3 in order to avoid rattlesnake
+volatile uint8_t switchers = 0b11000; // bits : 0 - sw1, 1 - sw2, 2 - sw3, 3 - tim3, 4 - tim16
+#define SW1 (1<<0)
+#define SW2 (1<<1)
+#define SW3 (1<<2)
+#define TIMER3 (1<<3)
+#define TIMER16 (1<<4)
+
 //uint8_t config = 0;							    // Variable for list
 typedef enum {
 	MAIN,
@@ -94,6 +103,7 @@ uint16_t size = INCH26_WHEEL;					// Size of wheel
 
 volatile uint8_t impulse = 0;								// Impulse from Hall sensor
 volatile uint16_t duration = 5025;						// Duration between impulse
+volatile uint8_t counter = 0;
 
 uint16_t dead_zone, direct_zone;				// Variables for calibration
 
@@ -111,8 +121,10 @@ static void MX_RTC_Init(void);
 static void MX_TIM16_Init(void);
 static void MX_TIM14_Init(void);
 static void MX_TIM3_Init(void);
+static void MX_TIM17_Init(void);
 /* USER CODE BEGIN PFP */
-
+void AntiRattlesnake_TIM16(uint16_t Delay);
+void CheckADC_or_Sleep(uint8_t Delay_ADC);
 
 void WriteTime();		// Show time on display
 void ConfigTime();		// Function for config time
@@ -127,25 +139,49 @@ void CalculateSpeed();		// Function for calculating actual and smooth speed
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 void HAL_GPIO_EXTI_Falling_Callback(uint16_t GPIO_Pin){		// EXTI Handler Falling SWITCHERS
-	if(GPIO_Pin == Sw1_Pin)
-		sw1 =1 ;
 
-	if(GPIO_Pin == Sw2_Pin)
-		sw2 = 1;
+	if(GPIO_Pin == Sw1_Pin){
+		switchers |= SW1;
 
-	if(GPIO_Pin == Sw3_Pin)
-		sw3 = 1;
+		HAL_TIM_Base_Stop_IT(&htim3);
+		TIM3->CNT = 0;
+		TIM3->SR &= ~TIM_SR_UIF;
+		TIM3->ARR = DELAY_ADC;
 
+		HAL_TIM_Base_Start_IT(&htim3);
+	}
+
+	if(GPIO_Pin == Sw2_Pin){
+		switchers |= SW2;
+
+		HAL_TIM_Base_Stop_IT(&htim3);
+		TIM3->CNT = 0;
+		TIM3->SR &= ~TIM_SR_UIF;
+		TIM3->ARR = DELAY_ADC;
+
+		HAL_TIM_Base_Start_IT(&htim3);
+	}
+
+	if(GPIO_Pin == Sw3_Pin){
+		switchers |= SW3;
+
+		HAL_TIM_Base_Stop_IT(&htim3);
+		TIM3->CNT = 0;
+		TIM3->SR &= ~TIM_SR_UIF;
+		TIM3->ARR = DELAY_ADC;
+
+		HAL_TIM_Base_Start_IT(&htim3);
+	}
 }
 void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin){		// EXTI Handler Rising SWITCHERS
 	if(GPIO_Pin == Sw1_Pin)
-		sw1 = 0;
+		switchers &= ~SW1;
 
 	if(GPIO_Pin == Sw2_Pin)
-		sw2 = 0;
+		switchers &= ~SW2;
 
 	if(GPIO_Pin == Sw3_Pin)
-		sw3 = 0;
+		switchers &= ~SW3;
 
 }
 
@@ -153,10 +189,30 @@ void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin){		// EXTI Handler Rising S
 void HAL_ADC_LevelOutOfWindowCallback(ADC_HandleTypeDef* hadc) 		// ADC Analog WatchDog Handler
 {
 
-	if(tim3)
-	impulse = 1;
-	else
-	 impulse = 0;
+HAL_ADC_Stop_DMA(&hadc1);
+
+
+				if(counter){
+					duration = TIM14->CNT;
+					TIM14->CNT = 0;
+				}
+				else{
+					TIM14->CNT = 0;
+					TIM14->SR &= ~TIM_SR_UIF;
+					HAL_TIM_Base_Start_IT(&htim14);
+					counter = 1;
+				}
+
+				switchers &= ~TIMER3;
+				HAL_TIM_Base_Stop_IT(&htim3);
+				TIM3->CNT = 0;
+				TIM3->SR &= ~TIM_SR_UIF;
+				TIM3->ARR = DELAY_ADC;
+
+				HAL_TIM_Base_Start_IT(&htim3);
+
+
+
 
 }
 /* USER CODE END 0 */
@@ -197,11 +253,12 @@ int main(void)
   MX_TIM16_Init();
   MX_TIM14_Init();
   MX_TIM3_Init();
+  MX_TIM17_Init();
   /* USER CODE BEGIN 2 */
   ssd1306_Init();
-    ssd1306_FlipScreenVertically();
-    ssd1306_Clear();
-    ssd1306_SetColor(White);
+  ssd1306_FlipScreenVertically();
+  ssd1306_Clear();
+  ssd1306_SetColor(White);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -216,20 +273,24 @@ direct_zone = 250;
   while (1)
   {
 
-	  if(sw1 && sw3){
-		  HAL_TIM_Base_Start(&htim16);
-		  if(TIM16->CNT >= 1500){
-			  config = 1;
-			  sw1 = 0;
-			  sw3 = 0;
-		  }
 
+	  if(switchers & SW1  && switchers & SW3){
+	if(!(switchers & TIMER16)){
+		if(TIM16->CNT >= 1500){
+					  config = 1;
+					  switchers &= ~SW1;
+					  switchers &= ~SW3;
+				  }
+	}
+	else{
+		switchers &= ~TIMER16;
+		TIM16->CNT = 0;
+		TIM16->SR &= ~TIM_SR_UIF;
+		TIM16->ARR = 2000;
+		HAL_TIM_Base_Start_IT(&htim16);
+	}
 	  }
 
-	  else{
-		  HAL_TIM_Base_Stop(&htim16);
-		  TIM16->CNT = 0;
-	  }
 
 switch (config){
 
@@ -239,118 +300,86 @@ WriteTime();
 WriteBatteryCharge(BatteryCharge());
 
 
-DetectImpulse();
+//DetectImpulse();
 CalculateSpeed();
 
-if(sw2)
+if(switchers & SW2)
 	ssd1306_InvertDisplay();
 
-else if(sw1)
+else if(switchers & SW1){
 	 ssd1306_NormalDisplay();
+}
 
 	 break;
 
 
 case(SETTINGS):			// Settings
 
-static int8_t con;
+//static int8_t con;
+typedef enum {STATUS = 0, SET_TIME = 1, SET_SIZE = 2, MAKE_CALIBRATION = -1} Settings;
+static Settings con;
 
-
-if(sw1 && sw3)
+if(switchers & SW1  && switchers & SW3)
 	__NOP();
 
-else if(sw3 && tim3){
+else if(switchers & SW3 && switchers & TIMER16){
 	con++;
-	tim3 = 0;
-	TIM3->CNT = 0;
-	TIM3->SR &= ~TIM_SR_UIF;
-	TIM3->ARR = DELAY;
-	HAL_TIM_Base_Start_IT(&htim3);
+	AntiRattlesnake_TIM16(DELAY);
 }
-
-else if(sw1 && tim3){
+else if(switchers & SW1 && switchers & TIMER16){
 	con--;
-	tim3 = 0;
-	TIM3->CNT = 0;
-	TIM3->SR &= ~TIM_SR_UIF;
-	TIM3->ARR = DELAY;
-	HAL_TIM_Base_Start_IT(&htim3);
+	AntiRattlesnake_TIM16(DELAY);
 }
 
 if(con >= 3)
-	con = 0;
-else if(con < 0)
+	con = -1;
+else if(con < -1)
 	con = 2;
 
 
 
 switch (con) {
-case(0): //Config Time
+case(STATUS) :
+		ssd1306_SetCursor(20, 0);
+		sprintf(buf, "STATUS");
+		ssd1306_WriteString(buf, Font_11x18);
+	break;
+
+case(SET_TIME): //Config Time
 		ssd1306_SetCursor(0, 0);
 		sprintf(buf, "Set time");
 		ssd1306_WriteString(buf, Font_11x18);
-		ssd1306_SetCursor(0, 19);
-		sprintf(buf, "Calibration");
-		ssd1306_WriteString(buf, Font_11x18);
-		ssd1306_SetCursor(0, 38);
-		sprintf(buf, "Set size");
-		ssd1306_WriteString(buf, Font_11x18);
 
-		if(sw2 && tim3){
+		if(switchers & SW2 && switchers & TIMER16){
 			config = 2;
-
-			tim3 = 0;
-			TIM3->CNT = 0;
-			TIM3->SR &= ~TIM_SR_UIF;
-			TIM3->ARR = DELAY;
-			HAL_TIM_Base_Start_IT(&htim3);
-
+			AntiRattlesnake_TIM16(DELAY);
 		}
 		break;
 
-case(1): //Config Size
+case(SET_SIZE): //Config Size
 
 		ssd1306_SetCursor(0, 0);
 		sprintf(buf, "Set size");
 		ssd1306_WriteString(buf, Font_11x18);
-		ssd1306_SetCursor(0, 19);
-		sprintf(buf, "Set time");
-		ssd1306_WriteString(buf, Font_11x18);
-		ssd1306_SetCursor(0, 38);
-		sprintf(buf, "Calibration");
-		ssd1306_WriteString(buf, Font_11x18);
-		if(sw2 && tim3){
+
+		if(switchers & SW2 && switchers & TIMER16){
 			config = 3;
 
 			size = 0;
 
-			tim3 = 0;
-			TIM3->CNT = 0;
-			TIM3->SR &= ~TIM_SR_UIF;
-			TIM3->ARR = DELAY;
-			HAL_TIM_Base_Start_IT(&htim3);
-
+			AntiRattlesnake_TIM16(DELAY);
 		}
 		break;
 
-case(2): //Config Calibration
+case(MAKE_CALIBRATION): //Config Calibration
 		ssd1306_SetCursor(0, 0);
 		sprintf(buf, "Calibration");
 		ssd1306_WriteString(buf, Font_11x18);
-		ssd1306_SetCursor(0, 19);
-		sprintf(buf, "Set size");
-		ssd1306_WriteString(buf, Font_11x18);
-		ssd1306_SetCursor(0, 38);
-		sprintf(buf, "Set time");
-		ssd1306_WriteString(buf, Font_11x18);
-		if(sw2 && tim3){
+
+		if (switchers & SW2 && switchers & TIMER16){
 			config = 4;
 
-			tim3 = 0;
-			TIM3->CNT = 0;
-			TIM3->SR &= ~TIM_SR_UIF;
-			TIM3->ARR = DELAY;
-			HAL_TIM_Base_Start_IT(&htim3);
+			AntiRattlesnake_TIM16(DELAY);
 
 		}
 		break;
@@ -365,7 +394,7 @@ uint8_t table_of_size[6] = {20, 24, 26, 27, 28, 29};
 
 		static int8_t sizes;
 
-		if(sw2 && tim3){
+		if(switchers & SW2 && switchers & TIMER16){
 			config = 0;
 
 			switch(sizes){
@@ -389,38 +418,25 @@ uint8_t table_of_size[6] = {20, 24, 26, 27, 28, 29};
 				break;
 			}
 
-
-			tim3 = 0;
-			TIM3->CNT = 0;
-			TIM3->SR &= ~TIM_SR_UIF;
-			TIM3->ARR = DELAY;
-			HAL_TIM_Base_Start_IT(&htim3);
+			AntiRattlesnake_TIM16(DELAY);
 
 			break;
 
 		}
-		else if(sw3 && tim3){
+		else if(switchers & SW3 && switchers & TIMER16){
 			sizes++;
 			if(sizes > 5)
 				sizes = 0;
 
-			tim3 = 0;
-			TIM3->CNT = 0;
-			TIM3->SR &= ~TIM_SR_UIF;
-			TIM3->ARR = DELAY;
-			HAL_TIM_Base_Start_IT(&htim3);
+			AntiRattlesnake_TIM16(DELAY);
 		}
 
-		else if(sw1 && tim3){
+		else if(switchers & SW1 && switchers & TIMER16){
 			sizes--;
 			if(sizes < 0)
 				sizes = 5;
 
-			tim3 = 0;
-			TIM3->CNT = 0;
-			TIM3->SR &= ~TIM_SR_UIF;
-			TIM3->ARR = DELAY;
-			HAL_TIM_Base_Start_IT(&htim3);
+			AntiRattlesnake_TIM16(DELAY);
 		}
 
 
@@ -444,8 +460,7 @@ static uint8_t zones;
 			sprintf(buf, "Set direct zone");
 			ssd1306_WriteString(buf, Font_7x10);
 
-
-			if(sw2 && tim3){
+if(switchers & SW2 && switchers & TIMER16){
 
 				direct_zone = adc[1];
 
@@ -454,11 +469,7 @@ static uint8_t zones;
 
 				direct_zone = (direct_zone > dead_zone)?(direct_zone - dead_zone) : (dead_zone - direct_zone);
 
-				tim3 = 0;
-				TIM3->CNT = 0;
-				TIM3->SR &= ~TIM_SR_UIF;
-				TIM3->ARR = DELAY;
-				HAL_TIM_Base_Start_IT(&htim3);
+				AntiRattlesnake_TIM16(DELAY);
 			}
 
 			}
@@ -467,18 +478,13 @@ static uint8_t zones;
 			sprintf(buf, "Set dead zone");
 			ssd1306_WriteString(buf, Font_7x10);
 
-
-			if(sw2 && tim3){
+if(switchers & SW2 && switchers & TIMER16){
 
 				dead_zone = adc[1];
 
 				zones = 1;
 
-				tim3 = 0;
-				TIM3->CNT = 0;
-				TIM3->SR &= ~TIM_SR_UIF;
-				TIM3->ARR = DELAY;
-				HAL_TIM_Base_Start_IT(&htim3);
+				AntiRattlesnake_TIM16(DELAY);
 			}
 
 
@@ -491,7 +497,6 @@ static uint8_t zones;
 			sprintf(buf, "Put middle button");
 			ssd1306_WriteString(buf, Font_7x10);
 
-		//}
 
 
 		break;
@@ -700,6 +705,9 @@ static void MX_RTC_Init(void)
 
   /* USER CODE END RTC_Init 0 */
 
+  RTC_TimeTypeDef sTime = {0};
+  RTC_DateTypeDef sDate = {0};
+
   /* USER CODE BEGIN RTC_Init 1 */
 
   /* USER CODE END RTC_Init 1 */
@@ -716,6 +724,32 @@ static void MX_RTC_Init(void)
   hrtc.Init.OutPutType = RTC_OUTPUT_TYPE_OPENDRAIN;
   hrtc.Init.OutPutPullUp = RTC_OUTPUT_PULLUP_NONE;
   if (HAL_RTC_Init(&hrtc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /* USER CODE BEGIN Check_RTC_BKUP */
+
+  /* USER CODE END Check_RTC_BKUP */
+
+  /** Initialize RTC and set the Time and Date
+  */
+  sTime.Hours = 0x0;
+  sTime.Minutes = 0x0;
+  sTime.Seconds = 0x0;
+  sTime.SubSeconds = 0x0;
+  sTime.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
+  sTime.StoreOperation = RTC_STOREOPERATION_RESET;
+  if (HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BCD) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sDate.WeekDay = RTC_WEEKDAY_MONDAY;
+  sDate.Month = RTC_MONTH_JANUARY;
+  sDate.Date = 0x1;
+  sDate.Year = 0x0;
+
+  if (HAL_RTC_SetDate(&hrtc, &sDate, RTC_FORMAT_BCD) != HAL_OK)
   {
     Error_Handler();
   }
@@ -788,7 +822,7 @@ static void MX_TIM14_Init(void)
   htim14.Instance = TIM14;
   htim14.Init.Prescaler = 15999;
   htim14.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim14.Init.Period = 0xFFFF;
+  htim14.Init.Period = 5050;
   htim14.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim14.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim14) != HAL_OK)
@@ -819,7 +853,7 @@ static void MX_TIM16_Init(void)
   htim16.Instance = TIM16;
   htim16.Init.Prescaler = 15999;
   htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim16.Init.Period = 0xFFFF;
+  htim16.Init.Period = 4999;
   htim16.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim16.Init.RepetitionCounter = 0;
   htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -830,6 +864,38 @@ static void MX_TIM16_Init(void)
   /* USER CODE BEGIN TIM16_Init 2 */
 
   /* USER CODE END TIM16_Init 2 */
+
+}
+
+/**
+  * @brief TIM17 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM17_Init(void)
+{
+
+  /* USER CODE BEGIN TIM17_Init 0 */
+
+  /* USER CODE END TIM17_Init 0 */
+
+  /* USER CODE BEGIN TIM17_Init 1 */
+
+  /* USER CODE END TIM17_Init 1 */
+  htim17.Instance = TIM17;
+  htim17.Init.Prescaler = 15999;
+  htim17.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim17.Init.Period = 65535;
+  htim17.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim17.Init.RepetitionCounter = 0;
+  htim17.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim17) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM17_Init 2 */
+
+  /* USER CODE END TIM17_Init 2 */
 
 }
 
@@ -1024,50 +1090,47 @@ void ConfigTime(){
 					  else
 						  sprintf(buf, "%d:%d:%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
 
-					  	  	ssd1306_SetCursor(28, 0);
-					        ssd1306_WriteString(buf, Font_7x10);
+					  	  	ssd1306_SetCursor(20, 0);
+					        ssd1306_WriteString(buf, Font_11x18);
 					      //  memset(buf, 0, sizeof(buf));
 
-					if(sw1 && sw3){
+					if(switchers & SW1 && switchers & SW3){
+					//if(sw1 && sw3){
 					if (HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BIN) != HAL_OK)
 					        Error_Handler();
 					    //accept = 0;
 					    config = 0;
 					}
 					else{
-					if(sw3 && tim3){
+					if(switchers & SW3 && switchers & TIMER16){
+					//if(sw3 && tim3){
 						if(sTime.Seconds < 60)
 							sTime.Seconds++;
 						else
 							sTime.Seconds = 0;
-						tim3 = 0;
-						TIM3->CNT = 0;
-						TIM3->SR &= ~TIM_SR_UIF;
-						TIM3->ARR = 200;
-						HAL_TIM_Base_Start_IT(&htim3);
+
+						AntiRattlesnake_TIM16(DELAY);
 
 					}
-					if(sw2  && tim3){
+
+					if(switchers & SW2 && switchers & TIMER16){
+					//if(sw2  && tim3){
 						if(sTime.Minutes < 60)
 							sTime.Minutes++;
 						else
 							sTime.Minutes = 0;
-						tim3 = 0;
-						TIM3->CNT = 0;
-						TIM3->SR &= ~TIM_SR_UIF;
-						TIM3->ARR = 200;
-						HAL_TIM_Base_Start_IT(&htim3);
+
+						AntiRattlesnake_TIM16(DELAY);
 					}
-					if(sw1 && tim3){
+
+					if(switchers & SW1 && switchers & TIMER16){
+					//if(sw1 && tim3){
 						if(sTime.Hours < 24)
 							sTime.Hours++;
 						else
 							sTime.Hours = 0;
-						tim3 = 0;
-						TIM3->CNT = 0;
-						TIM3->SR &= ~TIM_SR_UIF;
-						TIM3->ARR = 200;
-						HAL_TIM_Base_Start_IT(&htim3);
+
+						AntiRattlesnake_TIM16(DELAY);
 					}
 					}
 
@@ -1117,8 +1180,22 @@ void CalculateSpeed(){
 	if(TIM14->CNT > duration)
 	 duration = TIM14->CNT;
 
+	if(duration < 37){  // 200 khm
+//	volatile static uint8_t x, y;
+		ssd1306_SetCursor(0, 15); // 0, 15
+		snprintf(buf, sizeof(buf), "Check cable");
+		ssd1306_WriteString(buf, Font_11x18);
 
-	if(duration < 5000){
+		ssd1306_SetCursor(20, 32); // 0, 25
+		snprintf(buf, sizeof(buf), "or move");
+		ssd1306_WriteString(buf, Font_11x18);
+
+//		ssd1306_SetCursor(x, y); // 0, 25
+//		snprintf(buf, sizeof(buf), "a little");
+//		ssd1306_WriteString(buf, Font_11x18);
+
+	}
+	else if(duration < 5000){
 
 	speed = (size * 36)/duration  ;  // size = ? * 10^-3 ... speed = ... *10^3 -> del 10^+-3
 
@@ -1134,13 +1211,12 @@ void CalculateSpeed(){
 		 ssd1306_SetCursor(20, 25);
 		 snprintf(buf, sizeof(buf), "%d.%dkh/h", real_speed1, real_speed2);
 		 ssd1306_WriteString(buf, Font_11x18);
-//
-		 ssd1306_SetCursor(20, 45);
-		 snprintf(buf, sizeof(buf), "%d", duration);
-		 ssd1306_WriteString(buf, Font_11x18);
-		 //
+////
+//		 ssd1306_SetCursor(20, 45);
+//		 snprintf(buf, sizeof(buf), "%d", duration);
+//		 ssd1306_WriteString(buf, Font_11x18);
+//		 //
 	}
-
 	else{
 		ssd1306_SetCursor(20, 25);
 		snprintf(buf, sizeof(buf), "0.0kh/h");
@@ -1149,6 +1225,17 @@ void CalculateSpeed(){
 
 }
 
+void AntiRattlesnake_TIM16(uint16_t Delay){
+		switchers &= ~TIMER16;
+		TIM16->CNT = 0;
+		TIM16->SR &= ~TIM_SR_UIF;
+		TIM16->ARR = Delay;
+		HAL_TIM_Base_Start_IT(&htim16);
+}
+
+void CheckADC_or_Sleep(uint8_t Delay_ADC){
+
+}
 /* USER CODE END 4 */
 
 /**
