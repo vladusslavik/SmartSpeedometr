@@ -22,6 +22,7 @@
 #include "stm32g0xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "ssd1306.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -33,6 +34,8 @@
 /* USER CODE BEGIN PD */
 #define TIMER3 (1<<3)
 #define TIMER16 (1<<4)
+#define START_TIM14 (1<<5)
+#define SLEEP (1<<6)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -219,29 +222,30 @@ void ADC1_IRQHandler(void)
 void TIM3_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM3_IRQn 0 */
-	if(switchers & TIMER3){
-uint8_t a = 0;
-	}
-switchers |= TIMER3;
-//ADC1->CR |= ADC_CR_ADEN;
-//tim3 = 1;
+	//HAL_TIM_Base_Stop_IT(&htim3);
 
 HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc, 2);
 
-HAL_TIM_Base_Stop_IT(&htim3);
+//if(switchers & TIMER3){
+//	HAL_TIM_Base_Stop_IT(&htim3);
+//	switchers |= SLEEP;
+//
+//}
+//else if(!(switchers & TIMER3)){
 
+
+
+
+switchers |= TIMER3;
+//HAL_TIM_Base_Stop_IT(&htim3);
 
 TIM3->CNT = 0;
-TIM3->SR &= ~TIM_SR_UIF;
-TIM3->ARR = 19999;
+//TIM3->SR &= ~TIM_SR_UIF;
+//TIM3->ARR = 9999;
 
 HAL_TIM_Base_Start_IT(&htim3);
+//}
 
-//AnalogWDGConfig.ITMode = ENABLE;
-//if (HAL_ADC_AnalogWDGConfig(&hadc1, &AnalogWDGConfig) != HAL_OK)
-//  {
-//    Error_Handler();
-//  }
   /* USER CODE END TIM3_IRQn 0 */
   HAL_TIM_IRQHandler(&htim3);
   /* USER CODE BEGIN TIM3_IRQn 1 */
@@ -258,7 +262,8 @@ void TIM14_IRQHandler(void)
 	HAL_TIM_Base_Stop_IT(&htim14);
 	duration = 5025;
 	TIM14->CNT = 0;
-	counter = 0;
+	//counter = 0;
+	switchers &= ~START_TIM14;
   /* USER CODE END TIM14_IRQn 0 */
   HAL_TIM_IRQHandler(&htim14);
   /* USER CODE BEGIN TIM14_IRQn 1 */
@@ -291,8 +296,33 @@ HAL_TIM_Base_Stop_IT(&htim16);
 void TIM17_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM17_IRQn 0 */
+HAL_TIM_Base_Stop_IT(&htim17);
 
-//	HAL_TIM_Base_Stop_IT(&htim17);
+static uint8_t sleep;
+if(!(switchers & SLEEP))
+	sleep = 0;
+
+
+if(sleep){
+
+}
+else{
+
+switchers |= SLEEP;
+
+sleep = 1;
+
+		TIM17->CNT = 0;
+		TIM17->SR &= ~TIM_SR_UIF;
+		TIM17->PSC = 49999;
+		TIM17->ARR = 57599;
+		HAL_TIM_Base_Start_IT(&htim17);
+}
+
+
+
+
+
   /* USER CODE END TIM17_IRQn 0 */
   HAL_TIM_IRQHandler(&htim17);
   /* USER CODE BEGIN TIM17_IRQn 1 */

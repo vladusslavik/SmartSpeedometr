@@ -1,10 +1,24 @@
-14:16:05 **** Incremental Build of configuration Debug for project Smart_Speedometr ****
+22:38:49 **** Incremental Build of configuration Debug for project Smart_Speedometr ****
 make -j7 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m0plus -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32G030xx -c -I../Core/Inc -I../Drivers/STM32G0xx_HAL_Driver/Inc -I../Drivers/STM32G0xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32G0xx/Include -I../Drivers/CMSIS/Include -O1 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfloat-abi=soft -mthumb -o "Core/Src/main.o"
+../Core/Src/main.c: In function 'HAL_ADC_LevelOutOfWindowCallback':
+../Core/Src/main.c:242:48: warning: 'return' with a value, in function returning void [-Wreturn-type]
+  242 |                                         return 0;
+      |                                                ^
+../Core/Src/main.c:218:6: note: declared here
+  218 | void HAL_ADC_LevelOutOfWindowCallback(ADC_HandleTypeDef* hadc)          // ADC Analog WatchDog Handler
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+arm-none-eabi-gcc -o "Smart_Speedometr.elf" @"objects.list"   -mcpu=cortex-m0plus -T"/Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/STM32G030F6PX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Smart_Speedometr.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: Smart_Speedometr.elf
+ 
 arm-none-eabi-size  Smart_Speedometr.elf 
+arm-none-eabi-objdump -h -S Smart_Speedometr.elf  > "Smart_Speedometr.list"
    text	   data	    bss	    dec	    hex	filename
-  29080	    116	   3628	  32824	   8038	Smart_Speedometr.elf
+  31288	    116	   3780	  35184	   8970	Smart_Speedometr.elf
 Finished building: default.size.stdout
  
+Finished building: Smart_Speedometr.list
+ 
 
-14:16:05 Build Finished. 0 errors, 0 warnings. (took 489ms)
+22:38:50 Build Finished. 0 errors, 1 warnings. (took 1s.67ms)
 

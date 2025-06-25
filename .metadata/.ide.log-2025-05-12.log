@@ -1,0 +1,46 @@
+2025-05-13 15:12:40,760 [INFO] WebApp:191 - Connection restablished
+2025-05-13 15:13:44,188 [INFO] UtilMem:75 - End SaveConfig() Used Memory: 627786576 Bytes (1073741824)
+2025-05-13 15:13:45,731 [INFO] UtilMem:75 - End SaveConfig() Used Memory: 642466640 Bytes (1073741824)
+2025-05-13 15:13:47,901 [INFO] UtilMem:75 - End SaveConfig() Used Memory: 698567504 Bytes (1073741824)
+2025-05-13 15:13:48,248 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: RTC
+2025-05-13 15:13:48,248 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: NVIC
+2025-05-13 15:13:48,248 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: TIM1_8G0
+2025-05-13 15:13:48,249 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: TIM1_8G0
+2025-05-13 15:13:48,249 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: TIM1_8G0
+2025-05-13 15:13:48,249 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: TIM1_8G0
+2025-05-13 15:13:48,249 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: TIM1_8G0
+2025-05-13 15:13:48,249 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: SYS
+2025-05-13 15:13:48,249 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: GPIO
+2025-05-13 15:13:48,250 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: ADC
+2025-05-13 15:13:48,250 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: RCC
+2025-05-13 15:13:48,250 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: I2C
+2025-05-13 15:13:48,250 [INFO] CodeGenerator:882 - code generatio: config db path: /Applications/STM32CubeIDE.app/Contents/Eclipse/plugins/com.st.stm32cube.common.mx_6.14.1.202504091515//db/
+2025-05-13 15:13:48,285 [WARN] IP:2250 - OutPut1 not found: check if there is a RefParameter without a condition.
+2025-05-13 15:13:48,286 [WARN] IP:2250 - OutPut2 not found: check if there is a RefParameter without a condition.
+2025-05-13 15:13:48,286 [WARN] IP:2250 - OutPut3 not found: check if there is a RefParameter without a condition.
+2025-05-13 15:13:48,488 [INFO] CodeEngine:263 - oldGeneratedFile, /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/MXTmpFiles/license.tmp_save
+2025-05-13 15:13:48,787 [INFO] CodeEngine:287 - Generated code: /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/MXTmpFiles/license.tmp
+2025-05-13 15:13:48,862 [INFO] CodeEngine:263 - oldGeneratedFile, /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/MXTmpFiles/gpio.tmp_save
+2025-05-13 15:13:49,051 [INFO] CodeEngine:287 - Generated code: /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/MXTmpFiles/gpio.tmp
+2025-05-13 15:13:49,597 [INFO] CodeEngine:263 - oldGeneratedFile, /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Src/stm32g0xx_it.c_save
+2025-05-13 15:13:50,207 [INFO] CodeEngine:287 - Generated code: /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Src/stm32g0xx_it.c
+2025-05-13 15:13:50,209 [INFO] CodeEngine:263 - oldGeneratedFile, /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Inc/stm32g0xx_it.h_save
+2025-05-13 15:13:50,286 [INFO] CodeEngine:287 - Generated code: /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Inc/stm32g0xx_it.h
+2025-05-13 15:13:50,299 [INFO] CodeEngine:263 - oldGeneratedFile, /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Src/stm32g0xx_hal_msp.c_save
+2025-05-13 15:13:50,516 [INFO] CodeEngine:287 - Generated code: /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Src/stm32g0xx_hal_msp.c
+2025-05-13 15:13:50,519 [INFO] CodeEngine:263 - oldGeneratedFile, /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/MXTmpFiles/system.tmp_save
+2025-05-13 15:13:50,590 [INFO] CodeEngine:287 - Generated code: /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/MXTmpFiles/system.tmp
+2025-05-13 15:13:50,598 [INFO] CodeEngine:319 - oldGeneratedFile, /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Inc/stm32g0xx_hal_conf.h_save
+2025-05-13 15:13:50,695 [INFO] CodeEngine:343 - Generated code: /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Inc/stm32g0xx_hal_conf.h
+2025-05-13 15:13:50,716 [WARN] IPConfigManager:3790 - IP not found : TIM
+2025-05-13 15:13:50,717 [WARN] CodeGenerator:4198 - IP not found : null
+2025-05-13 15:13:50,723 [INFO] CodeEngine:263 - oldGeneratedFile, /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Inc/main.h_save
+2025-05-13 15:13:50,880 [INFO] CodeEngine:287 - Generated code: /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Inc/main.h
+2025-05-13 15:13:50,884 [INFO] CodeEngine:263 - oldGeneratedFile, /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Src/main.c_save
+2025-05-13 15:13:51,146 [INFO] CodeEngine:287 - Generated code: /Users/admin/Desktop/SmartSpeedometr/Smart_Speedometr/Core/Src/main.c
+2025-05-13 15:13:51,549 [INFO] ProjectBuilder:3324 - Time for Copy HAL[1] : 131mS.
+2025-05-13 15:13:51,552 [INFO] ProjectBuilder:4912 - Project Generator version: 4.6.0.1-B1
+2025-05-13 15:13:51,648 [INFO] ConfigFileManager:1590 - The Die is : DIE466
+2025-05-13 15:13:52,704 [INFO] ProjectBuilder:5191 - Time for Generating toolchain IDE Files: 1152mS.
+2025-05-13 15:13:52,705 [INFO] ProjectBuilder:3181 - Time for Copy CMSIS : 1mS.
+2025-05-13 15:13:52,707 [INFO] ProjectBuilder:3181 - Time for Copy CMSIS : 0mS.

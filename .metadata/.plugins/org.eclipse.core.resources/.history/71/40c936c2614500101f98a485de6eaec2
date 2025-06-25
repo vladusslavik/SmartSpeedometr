@@ -1,0 +1,1388 @@
+/* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file           : main.c
+  * @brief          : Main program body
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2025 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+/* USER CODE END Header */
+/* Includes ------------------------------------------------------------------*/
+#include "main.h"
+
+/* Private includes ----------------------------------------------------------*/
+/* USER CODE BEGIN Includes */
+#include <stdio.h>
+#include "ssd1306.h"
+
+/* USER CODE END Includes */
+
+/* Private typedef -----------------------------------------------------------*/
+/* USER CODE BEGIN PTD */
+
+/* USER CODE END PTD */
+
+/* Private define ------------------------------------------------------------*/
+/* USER CODE BEGIN PD */
+//#define ADDR_CALIBR_VREF ((uint16_t*) ((uint32_t) 0x1FFF75AA))
+
+#define INCH20_WHEEL 1595 // meters 10^-3
+#define INCH24_WHEEL 1915 // meters 10^-3
+#define INCH26_WHEEL 2074 // meters 10^-3
+#define INCH27_WHEEL 2154 // meters 10^-3
+#define INCH28_WHEEL 2234 // meters 10^-3
+#define INCH29_WHEEL 2314 // meters 10^-3
+
+#define SW1 (1<<0)		// Button 1
+#define SW2 (1<<1)		// Button 2
+#define SW3 (1<<2)		// Button 3
+#define TIMER3 (1<<3)	// Timer 3
+#define TIMER16 (1<<4)	// Timer 16
+#define START_TIM14 (1<<5)	// Start  Timer 14
+#define SLEEP (1<<6)	// Sleep MCU
+
+#define DELAY 200 		// ms
+#define DELAY_ADC 29 	// ms
+
+#define SMOOTH_SPEED_A 		25
+#define SMOOTH_SPEED_DEL 	(100-SMOOTH_SPEED_A)
+
+#define QUANTITY_OF_SAMPLES_SPEED 60
+
+/* USER CODE END PD */
+
+/* Private macro -------------------------------------------------------------*/
+/* USER CODE BEGIN PM */
+
+/* USER CODE END PM */
+
+/* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
+DMA_HandleTypeDef hdma_adc1;
+
+I2C_HandleTypeDef hi2c1;
+
+RTC_HandleTypeDef hrtc;
+
+TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim14;
+TIM_HandleTypeDef htim16;
+TIM_HandleTypeDef htim17;
+
+/* USER CODE BEGIN PV */
+
+RTC_TimeTypeDef sTime;
+RTC_DateTypeDef sDate;
+
+char buf[20]; // Buffer for sprintf
+
+volatile uint16_t adc[2]; 	// Results of ADC with DMA
+
+volatile uint16_t smooth_speed = 0;  // Variable for regulation speed
+volatile uint16_t speed = 0;			// Actual speed
+volatile uint16_t average_speed_array[QUANTITY_OF_SAMPLES_SPEED] = {0};
+volatile uint16_t average_speed_day = 0;
+
+volatile uint16_t odometr_hundreds = 0;
+volatile uint16_t odometr_thousands  = 0;
+volatile uint16_t odometr_decimal  = 0;
+volatile uint8_t impulse = 0;
+
+volatile uint8_t switchers = 0b10000; // bits : 0 - sw1, 1 - sw2, 2 - sw3, 3 - tim3, 4 - tim16, 5 - start_tim_14
+											// 6 - sleep
+
+
+typedef enum {
+	MAIN,
+	SETTINGS,
+	TIME,
+	SIZE,
+	CALIBRATION,
+	COLOR
+}Display;
+Display config = MAIN;
+
+uint16_t size = INCH26_WHEEL;					// Size of wheel
+
+
+//volatile uint8_t impulse = 0;								// Impulse from Hall sensor
+volatile uint16_t duration = 5025;						// Duration between impulse
+//volatile uint8_t counter = 0;
+
+uint16_t dead_zone, direct_zone;				// Variables for calibration
+
+
+
+/* USER CODE END PV */
+
+/* Private function prototypes -----------------------------------------------*/
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
+static void MX_I2C1_Init(void);
+static void MX_ADC1_Init(void);
+static void MX_RTC_Init(void);
+static void MX_TIM16_Init(void);
+static void MX_TIM14_Init(void);
+static void MX_TIM3_Init(void);
+static void MX_TIM17_Init(void);
+/* USER CODE BEGIN PFP */
+void AntiRattlesnake_TIM16(uint16_t Delay);
+void CheckADC_or_Sleep(uint8_t Delay_ADC);
+
+void WriteTime();		// Show time on display
+void ConfigTime();		// Function for config time
+
+uint16_t BatteryCharge();				// Measure Charge of battery
+void WriteBatteryCharge(uint16_t adc);	// Show Charge of battery
+
+//void DetectImpulse();		// Function for detect impulses
+void CalculateSpeed();		// Function for calculating actual and smooth speed
+/* USER CODE END PFP */
+
+/* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
+void HAL_GPIO_EXTI_Falling_Callback(uint16_t GPIO_Pin){		// EXTI Handler Falling SWITCHERS
+
+	if(GPIO_Pin == Sw1_Pin){
+		switchers |= SW1;
+
+		switchers &= ~SLEEP;
+
+		HAL_TIM_Base_Stop_IT(&htim17);
+		TIM17->CNT = 0;
+		TIM17->PSC = 15999;
+		TIM17->ARR = 14999;
+		TIM17->SR &= ~TIM_SR_UIF;
+		HAL_TIM_Base_Start_IT(&htim17);
+	}
+
+	if(GPIO_Pin == Sw2_Pin){
+		switchers |= SW2;
+
+		switchers &= ~SLEEP;
+
+		HAL_TIM_Base_Stop_IT(&htim17);
+		TIM17->CNT = 0;
+		TIM17->PSC = 15999;
+		TIM17->ARR = 14999;
+		TIM17->SR &= ~TIM_SR_UIF;
+		HAL_TIM_Base_Start_IT(&htim17);
+	}
+
+	if(GPIO_Pin == Sw3_Pin){
+		switchers |= SW3;
+
+		switchers &= ~SLEEP;
+
+		HAL_TIM_Base_Stop_IT(&htim17);
+		TIM17->CNT = 0;
+		TIM17->PSC = 15999;
+		TIM17->ARR = 14999;
+		TIM17->SR &= ~TIM_SR_UIF;
+		HAL_TIM_Base_Start_IT(&htim17);
+
+	}
+}
+void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin){		// EXTI Handler Rising SWITCHERS
+	if(GPIO_Pin == Sw1_Pin){
+		switchers &= ~SW1;
+	}
+
+	if(GPIO_Pin == Sw2_Pin){
+		switchers &= ~SW2;
+	}
+
+	if(GPIO_Pin == Sw3_Pin){
+		switchers &= ~SW3;
+	}
+
+}
+
+
+void HAL_ADC_LevelOutOfWindowCallback(ADC_HandleTypeDef* hadc) 		// ADC Analog WatchDog Handler
+{
+
+HAL_ADC_Stop_DMA(&hadc1);
+
+
+				if(switchers & START_TIM14){
+					duration = TIM14->CNT;
+					TIM14->CNT = 0;
+				}
+				else if(!(switchers & START_TIM14)){
+					TIM14->CNT = 0;
+					TIM14->SR &= ~TIM_SR_UIF;
+					HAL_TIM_Base_Start_IT(&htim14);
+					switchers |= START_TIM14;
+				}
+
+
+				if(duration > 37){
+
+					switchers &= ~SLEEP;
+					impulse++;
+
+					uint8_t static time_for_avr;
+					if(time_for_avr != sTime.Minutes){
+						time_for_avr = sTime.Minutes;
+						average_speed_array[time_for_avr] = smooth_speed;
+					}
+
+					HAL_TIM_Base_Stop_IT(&htim17);
+					TIM17->CNT = 0;
+					TIM17->PSC = 15999;
+					TIM17->ARR = 14999;
+					TIM17->SR &= ~TIM_SR_UIF;
+					HAL_TIM_Base_Start_IT(&htim17);
+
+				}
+
+
+
+				switchers &= ~TIMER3;
+				HAL_TIM_Base_Stop_IT(&htim3);
+				TIM3->CNT = 0;
+				TIM3->SR &= ~TIM_SR_UIF;
+				TIM3->ARR = DELAY_ADC;
+
+				HAL_TIM_Base_Start_IT(&htim3);
+
+
+
+
+}
+/* USER CODE END 0 */
+
+/**
+  * @brief  The application entry point.
+  * @retval int
+  */
+int main(void)
+{
+
+  /* USER CODE BEGIN 1 */
+
+  /* USER CODE END 1 */
+
+  /* MCU Configuration--------------------------------------------------------*/
+
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
+
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
+
+  /* Configure the system clock */
+  SystemClock_Config();
+
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_DMA_Init();
+  MX_I2C1_Init();
+  MX_ADC1_Init();
+  MX_RTC_Init();
+  MX_TIM16_Init();
+  MX_TIM14_Init();
+  MX_TIM3_Init();
+  MX_TIM17_Init();
+  /* USER CODE BEGIN 2 */
+  ssd1306_Init();
+  ssd1306_FlipScreenVertically();
+  ssd1306_Clear();
+  ssd1306_SetColor(White);
+  /* USER CODE END 2 */
+
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+
+HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc, 2);
+
+
+dead_zone = adc[1];
+direct_zone = 250;
+
+TIM17->CNT = 0;
+TIM17->SR &= ~TIM_SR_UIF;
+//TIM3->ARR = DELAY_ADC;
+HAL_TIM_Base_Start_IT(&htim17);
+
+
+  while (1)
+  {
+if(switchers & SLEEP)
+	ssd1306_DisplayOff();
+else if(!(switchers & SLEEP))
+	ssd1306_DisplayOn();
+
+
+
+
+
+	  if(switchers & SW1  && switchers & SW3){
+	if(!(switchers & TIMER16)){
+		if(TIM16->CNT >= 1500){
+					  config = 1;
+					  switchers &= ~SW1;
+					  switchers &= ~SW3;
+				  }
+	}
+	else{
+		switchers &= ~TIMER16;
+		TIM16->CNT = 0;
+		TIM16->SR &= ~TIM_SR_UIF;
+		TIM16->ARR = 2000;
+		HAL_TIM_Base_Start_IT(&htim16);
+	}
+	  }
+
+
+
+
+switch (config){
+
+case(MAIN):
+WriteTime();
+
+WriteBatteryCharge(BatteryCharge());
+
+
+CalculateSpeed();
+
+
+
+	 break;
+
+
+case(SETTINGS):			// Settings
+
+typedef enum {STATUS = 0, SET_TIME = 1, SET_SIZE = 2, SET_COLOR = 3, MAKE_CALIBRATION = -1} Settings;
+static Settings con;
+
+if(switchers & SW1  && switchers & SW3)
+	__NOP();
+
+else if(switchers & SW3 && switchers & TIMER16){
+	con++;
+	AntiRattlesnake_TIM16(DELAY);
+}
+else if(switchers & SW1 && switchers & TIMER16){
+	con--;
+	AntiRattlesnake_TIM16(DELAY);
+}
+
+if(con > 3)
+	con = -1;
+else if(con < -1)
+	con = 3;
+
+
+
+switch (con) {
+case(STATUS) :
+		ssd1306_SetCursor(20, 0);
+		sprintf(buf, "STATUS");
+		ssd1306_WriteString(buf, Font_11x18);
+
+		ssd1306_SetCursor(0, 20);
+		sprintf(buf, "AVR SPEED : %02u.%01u", average_speed_day/10, average_speed_day % 10);
+		ssd1306_WriteString(buf, Font_7x10);
+	break;
+
+case(SET_TIME): //Config Time
+		ssd1306_SetCursor(0, 0);
+		sprintf(buf, "Set time");
+		ssd1306_WriteString(buf, Font_11x18);
+
+		if(switchers & SW2 && switchers & TIMER16){
+			config = 2;
+			AntiRattlesnake_TIM16(DELAY);
+		}
+		break;
+
+case(SET_SIZE): //Config Size
+
+		ssd1306_SetCursor(0, 0);
+		sprintf(buf, "Set size");
+		ssd1306_WriteString(buf, Font_11x18);
+
+		if(switchers & SW2 && switchers & TIMER16){
+			config = 3;
+
+			size = 0;
+
+			AntiRattlesnake_TIM16(DELAY);
+		}
+		break;
+
+case(MAKE_CALIBRATION): //Config Calibration
+		ssd1306_SetCursor(0, 0);
+		sprintf(buf, "Calibration");
+		ssd1306_WriteString(buf, Font_11x18);
+
+		if (switchers & SW2 && switchers & TIMER16){
+			config = 4;
+
+			AntiRattlesnake_TIM16(DELAY);
+
+		}
+		break;
+
+case(SET_COLOR):
+		ssd1306_SetCursor(0, 0);
+		sprintf(buf, "Set mode");
+		ssd1306_WriteString(buf, Font_11x18);
+
+		ssd1306_SetCursor(0, 20);
+		sprintf(buf, "Dark or Light");
+		ssd1306_WriteString(buf, Font_7x10);
+
+		ssd1306_SetCursor(0, 30);
+		sprintf(buf, "for display");
+		ssd1306_WriteString(buf, Font_7x10);
+
+
+		if (switchers & SW2 && switchers & TIMER16){
+					config = 5;
+
+					AntiRattlesnake_TIM16(DELAY);
+
+				}
+
+
+		break;
+}
+		break;
+case(TIME):
+		ConfigTime();
+		break;
+case(SIZE): //Size
+
+uint8_t table_of_size[6] = {20, 24, 26, 27, 28, 29};
+
+		static int8_t sizes;
+
+		if(switchers & SW2 && switchers & TIMER16){
+			config = 0;
+
+			switch(sizes){
+			case (0) :
+		size = INCH20_WHEEL;
+				break;
+			case (1) :
+		size = INCH24_WHEEL;
+				break;
+			case (2) :
+		size = INCH26_WHEEL;
+				break;
+			case (3) :
+		size = INCH27_WHEEL;
+				break;
+			case (4) :
+		size = INCH28_WHEEL;
+				break;
+			case (5) :
+		size = INCH29_WHEEL;
+				break;
+			}
+
+			AntiRattlesnake_TIM16(DELAY);
+
+			break;
+
+		}
+		else if(switchers & SW3 && switchers & TIMER16){
+			sizes++;
+			if(sizes > 5)
+				sizes = 0;
+
+			AntiRattlesnake_TIM16(DELAY);
+		}
+
+		else if(switchers & SW1 && switchers & TIMER16){
+			sizes--;
+			if(sizes < 0)
+				sizes = 5;
+
+			AntiRattlesnake_TIM16(DELAY);
+		}
+
+
+		ssd1306_SetCursor(33, 0);
+		sprintf(buf, "Wheel");
+		ssd1306_WriteString(buf, Font_11x18);
+
+		ssd1306_SetCursor(0, 39);
+		sprintf(buf, "Size:%dinch", table_of_size[sizes]);
+		ssd1306_WriteString(buf, Font_11x18);
+
+
+		break;
+case(CALIBRATION): // Calibration
+
+static uint8_t zones;
+
+
+		if(zones){
+			ssd1306_SetCursor(17, 0);
+			sprintf(buf, "Set direct zone");
+			ssd1306_WriteString(buf, Font_7x10);
+
+if(switchers & SW2 && switchers & TIMER16){
+
+				direct_zone = adc[1];
+
+				zones = 0;
+				config = 0;
+
+				direct_zone = (direct_zone > dead_zone)?(direct_zone - dead_zone) : (dead_zone - direct_zone);
+
+				AntiRattlesnake_TIM16(DELAY);
+			}
+
+			}
+		else{
+			ssd1306_SetCursor(17, 0);
+			sprintf(buf, "Set dead zone");
+			ssd1306_WriteString(buf, Font_7x10);
+
+if(switchers & SW2 && switchers & TIMER16){
+
+				dead_zone = adc[1];
+
+				zones = 1;
+
+				AntiRattlesnake_TIM16(DELAY);
+			}
+
+
+	}
+
+			ssd1306_SetCursor(6, 24);
+			sprintf(buf, "%d", adc[1]);
+			ssd1306_WriteString(buf, Font_11x18);
+			ssd1306_SetCursor(6, 48);
+			sprintf(buf, "Put middle button");
+			ssd1306_WriteString(buf, Font_7x10);
+
+
+
+		break;
+
+case(COLOR):
+		ssd1306_SetCursor(0, 20);
+		sprintf(buf, "Left for");
+		ssd1306_WriteString(buf, Font_7x10);
+
+		ssd1306_SetCursor(0, 30);
+		sprintf(buf, "dark");
+		ssd1306_WriteString(buf, Font_7x10);
+
+		ssd1306_SetCursor(60, 20);
+		sprintf(buf, "Right for");
+		ssd1306_WriteString(buf, Font_7x10);
+
+		ssd1306_SetCursor(60, 30);
+		sprintf(buf, "light");
+		ssd1306_WriteString(buf, Font_7x10);
+
+
+		if(switchers & SW3){
+			ssd1306_InvertDisplay();
+			config = MAIN;
+		}
+		else if(switchers & SW1){
+			 ssd1306_NormalDisplay();
+			 config = MAIN;
+		}
+
+		break;
+}
+
+	 ssd1306_UpdateScreen();
+	 ssd1306_Clear();
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
+  }
+  /* USER CODE END 3 */
+}
+
+/**
+  * @brief System Clock Configuration
+  * @retval None
+  */
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+
+  /** Configure the main internal regulator output voltage
+  */
+  HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1);
+
+  /** Configure LSE Drive Capability
+  */
+  HAL_PWR_EnableBkUpAccess();
+  __HAL_RCC_LSEDRIVE_CONFIG(RCC_LSEDRIVE_LOW);
+
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSE;
+  RCC_OscInitStruct.LSEState = RCC_LSE_ON;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV1;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL.PLLM = RCC_PLLM_DIV1;
+  RCC_OscInitStruct.PLL.PLLN = 8;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV8;
+  RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV8;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/**
+  * @brief ADC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC1_Init(void)
+{
+
+  /* USER CODE BEGIN ADC1_Init 0 */
+
+  /* USER CODE END ADC1_Init 0 */
+
+  ADC_AnalogWDGConfTypeDef AnalogWDGConfig = {0};
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC1_Init 1 */
+
+  /* USER CODE END ADC1_Init 1 */
+
+  /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
+  */
+  hadc1.Instance = ADC1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV4;
+  hadc1.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc1.Init.ScanConvMode = ADC_SCAN_ENABLE;
+  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc1.Init.LowPowerAutoWait = DISABLE;
+  hadc1.Init.LowPowerAutoPowerOff = DISABLE;
+  hadc1.Init.ContinuousConvMode = ENABLE;
+  hadc1.Init.NbrOfConversion = 2;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc1.Init.DMAContinuousRequests = ENABLE;
+  hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
+  hadc1.Init.SamplingTimeCommon1 = ADC_SAMPLETIME_160CYCLES_5;
+  hadc1.Init.SamplingTimeCommon2 = ADC_SAMPLETIME_1CYCLE_5;
+  hadc1.Init.OversamplingMode = DISABLE;
+  hadc1.Init.TriggerFrequencyMode = ADC_TRIGGER_FREQ_HIGH;
+  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analog WatchDog 1
+  */
+  AnalogWDGConfig.WatchdogNumber = ADC_ANALOGWATCHDOG_1;
+  AnalogWDGConfig.WatchdogMode = ADC_ANALOGWATCHDOG_SINGLE_REG;
+  AnalogWDGConfig.Channel = ADC_CHANNEL_5;
+  AnalogWDGConfig.ITMode = ENABLE;
+  AnalogWDGConfig.HighThreshold = 2300;
+  AnalogWDGConfig.LowThreshold = 2000;
+  if (HAL_ADC_AnalogWDGConfig(&hadc1, &AnalogWDGConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_3;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SamplingTime = ADC_SAMPLINGTIME_COMMON_1;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_5;
+  sConfig.Rank = ADC_REGULAR_RANK_2;
+  sConfig.SamplingTime = ADC_SAMPLINGTIME_COMMON_2;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC1_Init 2 */
+
+  /* USER CODE END ADC1_Init 2 */
+
+}
+
+/**
+  * @brief I2C1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C1_Init(void)
+{
+
+  /* USER CODE BEGIN I2C1_Init 0 */
+
+  /* USER CODE END I2C1_Init 0 */
+
+  /* USER CODE BEGIN I2C1_Init 1 */
+
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.Timing = 0x00503D58;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
+
+  /* USER CODE END I2C1_Init 2 */
+
+}
+
+/**
+  * @brief RTC Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_RTC_Init(void)
+{
+
+  /* USER CODE BEGIN RTC_Init 0 */
+
+  /* USER CODE END RTC_Init 0 */
+
+  /* USER CODE BEGIN RTC_Init 1 */
+
+  /* USER CODE END RTC_Init 1 */
+
+  /** Initialize RTC Only
+  */
+  hrtc.Instance = RTC;
+  hrtc.Init.HourFormat = RTC_HOURFORMAT_24;
+  hrtc.Init.AsynchPrediv = 127;
+  hrtc.Init.SynchPrediv = 255;
+  hrtc.Init.OutPut = RTC_OUTPUT_DISABLE;
+  hrtc.Init.OutPutRemap = RTC_OUTPUT_REMAP_NONE;
+  hrtc.Init.OutPutPolarity = RTC_OUTPUT_POLARITY_HIGH;
+  hrtc.Init.OutPutType = RTC_OUTPUT_TYPE_OPENDRAIN;
+  hrtc.Init.OutPutPullUp = RTC_OUTPUT_PULLUP_NONE;
+  if (HAL_RTC_Init(&hrtc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN RTC_Init 2 */
+
+  /* USER CODE END RTC_Init 2 */
+
+}
+
+/**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 15999;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 59;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+
+}
+
+/**
+  * @brief TIM14 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM14_Init(void)
+{
+
+  /* USER CODE BEGIN TIM14_Init 0 */
+
+  /* USER CODE END TIM14_Init 0 */
+
+  /* USER CODE BEGIN TIM14_Init 1 */
+
+  /* USER CODE END TIM14_Init 1 */
+  htim14.Instance = TIM14;
+  htim14.Init.Prescaler = 15999;
+  htim14.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim14.Init.Period = 5050;
+  htim14.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim14.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim14) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM14_Init 2 */
+
+  /* USER CODE END TIM14_Init 2 */
+
+}
+
+/**
+  * @brief TIM16 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM16_Init(void)
+{
+
+  /* USER CODE BEGIN TIM16_Init 0 */
+
+  /* USER CODE END TIM16_Init 0 */
+
+  /* USER CODE BEGIN TIM16_Init 1 */
+
+  /* USER CODE END TIM16_Init 1 */
+  htim16.Instance = TIM16;
+  htim16.Init.Prescaler = 15999;
+  htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim16.Init.Period = 4999;
+  htim16.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim16.Init.RepetitionCounter = 0;
+  htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim16) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM16_Init 2 */
+
+  /* USER CODE END TIM16_Init 2 */
+
+}
+
+/**
+  * @brief TIM17 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM17_Init(void)
+{
+
+  /* USER CODE BEGIN TIM17_Init 0 */
+
+  /* USER CODE END TIM17_Init 0 */
+
+  /* USER CODE BEGIN TIM17_Init 1 */
+
+  /* USER CODE END TIM17_Init 1 */
+  htim17.Instance = TIM17;
+  htim17.Init.Prescaler = 15999;
+  htim17.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim17.Init.Period = 14999;
+  htim17.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim17.Init.RepetitionCounter = 0;
+  htim17.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim17) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM17_Init 2 */
+
+  /* USER CODE END TIM17_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+
+}
+
+/**
+  * @brief GPIO Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_GPIO_Init(void)
+{
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+  /* USER CODE BEGIN MX_GPIO_Init_1 */
+
+  /* USER CODE END MX_GPIO_Init_1 */
+
+  /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+
+  /*Configure GPIO pins : PA0 PA1 PA2 PA4 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_4;
+  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : Sw3_Pin Sw2_Pin STDBY_BAT_Pin CHRG_BAT_Pin */
+  GPIO_InitStruct.Pin = Sw3_Pin|Sw2_Pin|STDBY_BAT_Pin|CHRG_BAT_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : Sw1_Pin */
+  GPIO_InitStruct.Pin = Sw1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(Sw1_GPIO_Port, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI0_1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI0_1_IRQn);
+
+  HAL_NVIC_SetPriority(EXTI4_15_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI4_15_IRQn);
+
+  /* USER CODE BEGIN MX_GPIO_Init_2 */
+
+  /* USER CODE END MX_GPIO_Init_2 */
+}
+
+/* USER CODE BEGIN 4 */
+//void ADC_Select_CH3(){
+//
+//	 sConfig.Channel = ADC_CHANNEL_3;
+//	 sConfig.Rank = ADC_REGULAR_RANK_1;
+//	 sConfig.SamplingTime = ADC_SAMPLINGTIME_COMMON_1;
+//	 if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+//	 {
+//	 	Error_Handler();
+//	 }
+//}
+//void ADC_Select_CH5(){
+//
+//	 sConfig.Channel = ADC_CHANNEL_5;
+//	 sConfig.Rank = ADC_REGULAR_RANK_1;
+//	 sConfig.SamplingTime = ADC_SAMPLINGTIME_COMMON_2;
+//	 if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+//	 {
+//	 	Error_Handler();
+//	 }
+//
+//}
+
+void WriteTime(){
+	HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN);
+    HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN);
+
+		  if(sTime.Seconds < 10 && sTime.Minutes < 10 && sTime.Hours < 10)
+			  sprintf(buf, "0%d:0%d:0%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+
+		  else if(sTime.Seconds < 10 && sTime.Minutes < 10)
+			  sprintf(buf, "%d:0%d:0%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+
+		  else if(sTime.Seconds < 10 && sTime.Hours < 10)
+			  sprintf(buf, "0%d:%d:0%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+
+		  else if(sTime.Hours < 10 && sTime.Minutes < 10)
+			  sprintf(buf, "0%d:0%d:%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+
+		  else if(sTime.Seconds < 10)
+			  sprintf(buf, "%d:%d:0%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+
+		  else if(sTime.Minutes < 10)
+			  sprintf(buf, "%d:0%d:%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+
+		  else if(sTime.Hours < 10)
+			  sprintf(buf, "0%d:%d:%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+		  else
+			  sprintf(buf, "%d:%d:%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+
+		  	  	ssd1306_SetCursor(28, 0);
+		        ssd1306_WriteString(buf, Font_7x10);
+		        //memset(buf, 0, sizeof(buf));
+}
+
+uint16_t BatteryCharge(){
+	static uint16_t adc1;
+	static uint8_t once_minute, access;
+	//if(tim17 % 2 == 0){
+
+//		 ADC_Select_CH3();
+//		 HAL_ADC_Start(&hadc1);
+//		 HAL_ADC_PollForConversion(&hadc1, 100);
+//		 adc = HAL_ADC_GetValue(&hadc1);
+		//
+
+
+	if(access){
+		adc1 = adc[0];
+		//
+		 if(adc1 > 2050){
+		 adc1 -= 2050;
+		 adc1 *= 0.175f;
+		 }
+		 else
+		adc1 = 0;
+
+		 once_minute = sTime.Minutes;
+		 access = 0;
+	}
+
+	if(sTime.Minutes != once_minute)
+			access = 1;
+//	else{
+//		once_minute = sTime.Minutes;
+//		access = 0;
+//	}
+		// HAL_ADC_Stop(&hadc1);
+	//tim17 = 1;
+//		}
+//	else{
+//
+//		return adc;
+//	}
+	if(adc1 >= 100)
+	adc1 = 100;
+
+	return adc1;
+}
+
+
+void WriteBatteryCharge(uint16_t adc){
+
+	ssd1306_SetCursor(100, 0);
+		 sprintf(buf, "%d", adc);
+		 ssd1306_WriteString(buf, Font_7x10);
+		 ssd1306_WriteChar('%', Font_7x10);
+		 //memset(buf, 0, sizeof(buf));
+}
+
+void ConfigTime(){
+	if(sTime.Seconds < 10 && sTime.Minutes < 10 && sTime.Hours < 10)
+						  sprintf(buf, "0%d:0%d:0%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+
+					  else if(sTime.Seconds < 10 && sTime.Minutes < 10)
+						  sprintf(buf, "%d:0%d:0%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+
+					  else if(sTime.Seconds < 10 && sTime.Hours < 10)
+						  sprintf(buf, "0%d:%d:0%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+
+					  else if(sTime.Hours < 10 && sTime.Minutes < 10)
+						  sprintf(buf, "0%d:0%d:%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+
+					  else if(sTime.Seconds < 10)
+						  sprintf(buf, "%d:%d:0%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+
+					  else if(sTime.Minutes < 10)
+						  sprintf(buf, "%d:0%d:%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+
+					  else if(sTime.Hours < 10)
+						  sprintf(buf, "0%d:%d:%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+					  else
+						  sprintf(buf, "%d:%d:%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+
+					  	  	ssd1306_SetCursor(20, 0);
+					        ssd1306_WriteString(buf, Font_11x18);
+					      //  memset(buf, 0, sizeof(buf));
+
+					if(switchers & SW1 && switchers & SW3){
+					//if(sw1 && sw3){
+					if (HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BIN) != HAL_OK)
+					        Error_Handler();
+					    //accept = 0;
+					    config = 0;
+					}
+					else{
+					if(switchers & SW3 && switchers & TIMER16){
+					//if(sw3 && tim3){
+						if(sTime.Seconds < 60)
+							sTime.Seconds++;
+						else
+							sTime.Seconds = 0;
+
+						AntiRattlesnake_TIM16(DELAY);
+
+					}
+
+					if(switchers & SW2 && switchers & TIMER16){
+					//if(sw2  && tim3){
+						if(sTime.Minutes < 60)
+							sTime.Minutes++;
+						else
+							sTime.Minutes = 0;
+
+						AntiRattlesnake_TIM16(DELAY);
+					}
+
+					if(switchers & SW1 && switchers & TIMER16){
+					//if(sw1 && tim3){
+						if(sTime.Hours < 24)
+							sTime.Hours++;
+						else
+							sTime.Hours = 0;
+
+						AntiRattlesnake_TIM16(DELAY);
+					}
+					}
+
+}
+
+
+//void DetectImpulse(){
+//	if((impulse  && tim3) || (TIM14->CNT  > 5050)){
+//
+//		volatile static uint8_t  timer;
+//
+//				if(TIM14->CNT > 5050){
+//					HAL_TIM_Base_Stop(&htim14);
+//					duration = 5025;
+//					TIM14->CNT = 0;
+//					timer = 0;
+//				}
+//
+//	else{
+//
+//			if(timer){
+//				duration = TIM14->CNT;
+//				TIM14->CNT = 0;
+//			}
+//			else{
+//				TIM14->CNT = 0;
+//				TIM14->SR &= ~TIM_SR_UIF;
+//				HAL_TIM_Base_Start(&htim14);
+//				timer = 1;
+//			}
+//	tim3 = 0;
+//	TIM3->CNT = 0;
+//	TIM3->SR &= ~TIM_SR_UIF;
+//	TIM3->ARR = 29;
+//
+//	impulse = 0;
+//
+//	HAL_TIM_Base_Start_IT(&htim3);
+//
+//	}
+//
+//}
+//}
+
+void CalculateSpeed(){
+
+	if(TIM14->CNT > duration)
+	 duration = TIM14->CNT;
+
+	if(duration < 37){  // 200 khm
+			ssd1306_SetCursor(0, 15);
+			snprintf(buf, sizeof(buf), "Check cable");
+			ssd1306_WriteString(buf, Font_11x18);
+
+			ssd1306_SetCursor(20, 32);
+			snprintf(buf, sizeof(buf), "or move");
+			ssd1306_WriteString(buf, Font_11x18);
+
+
+		}
+	else if(duration < 5000){
+
+	speed = (size * 36)/duration  ;  // size = ? * 10^-3 ... speed = ... *10^3 -> del 10^+-3
+
+
+	smooth_speed = (SMOOTH_SPEED_A * speed + SMOOTH_SPEED_DEL * smooth_speed)/100;
+
+
+	volatile uint8_t real_speed1 = (uint16_t)smooth_speed / 10;
+
+	volatile uint8_t real_speed2 = (uint16_t)smooth_speed % 10;
+
+
+		 ssd1306_SetCursor(20, 25);
+		 snprintf(buf, sizeof(buf), "%d.%dkh/h", real_speed1, real_speed2);
+		 ssd1306_WriteString(buf, Font_11x18);
+	}
+	else{
+		ssd1306_SetCursor(20, 25);
+		snprintf(buf, sizeof(buf), "0.0kh/h");
+		ssd1306_WriteString(buf, Font_11x18);
+	}
+
+
+	//odometr max : 49999.999
+	uint16_t counter = impulse * size;   // size 2074 od 1
+	counter = counter / 10 ; //207 , 2 m 7 cm
+	odometr_decimal += counter;
+
+	if(odometr_decimal > 100){
+		odometr_hundreds += odometr_decimal/100;
+		odometr_decimal = odometr_decimal % 100;
+
+ 	}
+
+
+	if(odometr_hundreds > 1000){
+		odometr_thousands++;
+		odometr_hundreds = odometr_hundreds - 1000;
+	}
+
+	if(odometr_thousands > 49999)
+		odometr_thousands = 0;
+
+	impulse = 0;
+
+//volatile static uint8_t x,y;
+	ssd1306_SetCursor(17, 50);
+	snprintf(buf, sizeof(buf), "%05u.%03ukh/m", odometr_thousands, odometr_hundreds);
+	//ssd1306_WriteString(buf, Font_11x18);
+	ssd1306_WriteString(buf, Font_7x10);
+
+
+	// Average speed
+	uint16_t solve = 0;
+for(uint8_t i = 0 ; i < QUANTITY_OF_SAMPLES_SPEED; i++)
+	solve += average_speed_array[i]/QUANTITY_OF_SAMPLES_SPEED;
+
+average_speed_day = solve;
+
+
+}
+
+void AntiRattlesnake_TIM16(uint16_t Delay){
+		switchers &= ~TIMER16;
+		TIM16->CNT = 0;
+		TIM16->SR &= ~TIM_SR_UIF;
+		TIM16->ARR = Delay;
+		HAL_TIM_Base_Start_IT(&htim16);
+}
+
+void CheckADC_or_Sleep(uint8_t Delay_ADC){
+
+}
+/* USER CODE END 4 */
+
+/**
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */
+void Error_Handler(void)
+{
+  /* USER CODE BEGIN Error_Handler_Debug */
+  /* User can add his own implementation to report the HAL error return state */
+  __disable_irq();
+  while (1)
+  {
+  }
+  /* USER CODE END Error_Handler_Debug */
+}
+
+#ifdef  USE_FULL_ASSERT
+/**
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */
+void assert_failed(uint8_t *file, uint32_t line)
+{
+  /* USER CODE BEGIN 6 */
+  /* User can add his own implementation to report the file name and line number,
+     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* USER CODE END 6 */
+}
+#endif /* USE_FULL_ASSERT */
