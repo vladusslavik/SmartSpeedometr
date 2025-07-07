@@ -602,8 +602,7 @@ if(switchers & SW2 && switchers & TIMER16){
 				zones = 0;
 				config = MAIN;
 
-		//		uint8_t delta;
-//				delta = (direct_zone > dead_zone)?(direct_zone - dead_zone) : (dead_zone - direct_zone);
+
 				volatile uint16_t delta;
 				if(direct_zone > dead_zone){
 				 delta= (direct_zone - dead_zone)/2;
@@ -1139,70 +1138,22 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-//void ADC_Select_CH3(){
-//
-//	 sConfig.Channel = ADC_CHANNEL_3;
-//	 sConfig.Rank = ADC_REGULAR_RANK_1;
-//	 sConfig.SamplingTime = ADC_SAMPLINGTIME_COMMON_1;
-//	 if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
-//	 {
-//	 	Error_Handler();
-//	 }
-//}
-//void ADC_Select_CH5(){
-//
-//	 sConfig.Channel = ADC_CHANNEL_5;
-//	 sConfig.Rank = ADC_REGULAR_RANK_1;
-//	 sConfig.SamplingTime = ADC_SAMPLINGTIME_COMMON_2;
-//	 if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
-//	 {
-//	 	Error_Handler();
-//	 }
-//
-//}
+
 
 void WriteTime(){
 	HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN);
     HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN);
 
-		  if(sTime.Seconds < 10 && sTime.Minutes < 10 && sTime.Hours < 10)
-			  sprintf(buf, "0%d:0%d:0%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
-
-		  else if(sTime.Seconds < 10 && sTime.Minutes < 10)
-			  sprintf(buf, "%d:0%d:0%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
-
-		  else if(sTime.Seconds < 10 && sTime.Hours < 10)
-			  sprintf(buf, "0%d:%d:0%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
-
-		  else if(sTime.Hours < 10 && sTime.Minutes < 10)
-			  sprintf(buf, "0%d:0%d:%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
-
-		  else if(sTime.Seconds < 10)
-			  sprintf(buf, "%d:%d:0%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
-
-		  else if(sTime.Minutes < 10)
-			  sprintf(buf, "%d:0%d:%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
-
-		  else if(sTime.Hours < 10)
-			  sprintf(buf, "0%d:%d:%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
-		  else
-			  sprintf(buf, "%d:%d:%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+    sprintf(buf, "%02u:%02u:%02u", sTime.Hours, sTime.Minutes, sTime.Seconds);
 
 		  	  	ssd1306_SetCursor(28, 0);
 		        ssd1306_WriteString(buf, Font_7x10);
-		        //memset(buf, 0, sizeof(buf));
+
 }
 
 uint16_t BatteryCharge(){
 	static uint16_t adc1;
 	static uint8_t once_minute, access;
-	//if(tim17 % 2 == 0){
-
-//		 ADC_Select_CH3();
-//		 HAL_ADC_Start(&hadc1);
-//		 HAL_ADC_PollForConversion(&hadc1, 100);
-//		 adc = HAL_ADC_GetValue(&hadc1);
-		//
 
 
 	if(access){
@@ -1221,17 +1172,7 @@ uint16_t BatteryCharge(){
 
 	if(sTime.Minutes != once_minute)
 			access = 1;
-//	else{
-//		once_minute = sTime.Minutes;
-//		access = 0;
-//	}
-		// HAL_ADC_Stop(&hadc1);
-	//tim17 = 1;
-//		}
-//	else{
-//
-//		return adc;
-//	}
+
 	if(adc1 >= 100)
 	adc1 = 100;
 
@@ -1245,47 +1186,27 @@ void WriteBatteryCharge(uint16_t adc){
 		 sprintf(buf, "%d", adc);
 		 ssd1306_WriteString(buf, Font_7x10);
 		 ssd1306_WriteChar('%', Font_7x10);
-		 //memset(buf, 0, sizeof(buf));
+
 }
 
 void ConfigTime(){
-	if(sTime.Seconds < 10 && sTime.Minutes < 10 && sTime.Hours < 10)
-						  sprintf(buf, "0%d:0%d:0%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
 
-					  else if(sTime.Seconds < 10 && sTime.Minutes < 10)
-						  sprintf(buf, "%d:0%d:0%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
-
-					  else if(sTime.Seconds < 10 && sTime.Hours < 10)
-						  sprintf(buf, "0%d:%d:0%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
-
-					  else if(sTime.Hours < 10 && sTime.Minutes < 10)
-						  sprintf(buf, "0%d:0%d:%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
-
-					  else if(sTime.Seconds < 10)
-						  sprintf(buf, "%d:%d:0%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
-
-					  else if(sTime.Minutes < 10)
-						  sprintf(buf, "%d:0%d:%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
-
-					  else if(sTime.Hours < 10)
-						  sprintf(buf, "0%d:%d:%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
-					  else
-						  sprintf(buf, "%d:%d:%d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+	sprintf(buf, "%02u:%02u:%02u", sTime.Hours, sTime.Minutes, sTime.Seconds);
 
 					  	  	ssd1306_SetCursor(20, 0);
 					        ssd1306_WriteString(buf, Font_11x18);
-					      //  memset(buf, 0, sizeof(buf));
+
 
 					if(switchers & SW1 && switchers & SW3){
-					//if(sw1 && sw3){
+
 					if (HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BIN) != HAL_OK)
 					        Error_Handler();
-					    //accept = 0;
+
 					    config = 0;
 					}
 					else{
 					if(switchers & SW3 && switchers & TIMER16){
-					//if(sw3 && tim3){
+
 						if(sTime.Seconds < 60)
 							sTime.Seconds++;
 						else
@@ -1296,7 +1217,6 @@ void ConfigTime(){
 					}
 
 					if(switchers & SW2 && switchers & TIMER16){
-					//if(sw2  && tim3){
 						if(sTime.Minutes < 60)
 							sTime.Minutes++;
 						else
@@ -1306,7 +1226,6 @@ void ConfigTime(){
 					}
 
 					if(switchers & SW1 && switchers & TIMER16){
-					//if(sw1 && tim3){
 						if(sTime.Hours < 24)
 							sTime.Hours++;
 						else
@@ -1319,43 +1238,6 @@ void ConfigTime(){
 }
 
 
-//void DetectImpulse(){
-//	if((impulse  && tim3) || (TIM14->CNT  > 5050)){
-//
-//		volatile static uint8_t  timer;
-//
-//				if(TIM14->CNT > 5050){
-//					HAL_TIM_Base_Stop(&htim14);
-//					duration = 5025;
-//					TIM14->CNT = 0;
-//					timer = 0;
-//				}
-//
-//	else{
-//
-//			if(timer){
-//				duration = TIM14->CNT;
-//				TIM14->CNT = 0;
-//			}
-//			else{
-//				TIM14->CNT = 0;
-//				TIM14->SR &= ~TIM_SR_UIF;
-//				HAL_TIM_Base_Start(&htim14);
-//				timer = 1;
-//			}
-//	tim3 = 0;
-//	TIM3->CNT = 0;
-//	TIM3->SR &= ~TIM_SR_UIF;
-//	TIM3->ARR = 29;
-//
-//	impulse = 0;
-//
-//	HAL_TIM_Base_Start_IT(&htim3);
-//
-//	}
-//
-//}
-//}
 
 void CalculateSpeed(){
 
@@ -1419,10 +1301,8 @@ void CalculateSpeed(){
 
 	impulse = 0;
 
-//volatile static uint8_t x,y;
 	ssd1306_SetCursor(17, 50);
 	snprintf(buf, sizeof(buf), "%05u.%03ukh/m", odometr_thousands, odometr_hundreds);
-	//ssd1306_WriteString(buf, Font_11x18);
 	ssd1306_WriteString(buf, Font_7x10);
 
 
@@ -1433,7 +1313,7 @@ for(uint8_t i = 0 ; i < QUANTITY_OF_SAMPLES_SPEED; i++)
 
 average_speed_day = solve;
 
-// Max spees
+// Max speed
 if(smooth_speed > max_speed_day)
 	max_speed_day = smooth_speed;
 }
